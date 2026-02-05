@@ -28,8 +28,14 @@
 }
 
 .bannerImage {
-    width: 100%;
-    height: auto;
     display: block;
     object-fit: cover;
+}
+
+@media print {
+    .mainContent {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
 }

@@ -306,6 +306,19 @@ const StudentDashboard = () => {
 
         return (
             <div className={styles.detailsContainer}>
+                {/* Print Header - Visible only in Print */}
+                <div className={styles.printHeader}>
+                    <h1>CIE Performance Report</h1>
+                    <p>{studentInfo.name} ({studentInfo.rollNo}) | {studentInfo.branch} | Semester {selectedSemester}</p>
+                </div>
+
+                <div className={styles.cardHeader}>
+                    <h3 className={styles.cardTitle} style={{ fontSize: '1.25rem' }}>Semester {selectedSemester} - CIE Performance</h3>
+                    <button className={styles.downloadBtn} onClick={handleDownload}>
+                        <Download size={16} /> Download Report
+                    </button>
+                </div>
+
                 <div className={styles.card} style={{ marginBottom: '1.5rem' }}>
                     <div className={styles.selectionRow}>
                         <div className={styles.selectionGroup}>
@@ -550,9 +563,6 @@ const StudentDashboard = () => {
                     <p className={styles.subtitle}>{studentInfo.branch} | Semester: {studentInfo.semester} | Reg No: {studentInfo.rollNo}</p>
                 </div>
                 <div className={styles.headerStats}>
-                    <button className={styles.downloadBtn} onClick={handleDownload}>
-                        <Download size={18} /> Download Report
-                    </button>
                     <div className={styles.headerStat}>
                         <TrendingUp size={18} className={styles.statIcon} />
                         <span>CGPA: <strong>{studentInfo.cgpa}</strong></span>
