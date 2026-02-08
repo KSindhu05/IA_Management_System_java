@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import DashboardLayout from '../components/DashboardLayout';
 import {
     LayoutDashboard, Users, FileText, CheckCircle, TrendingUp, BarChart2,
@@ -35,6 +36,7 @@ const hodData = {};
 const hodBranchComparison = {};
 
 const HODDashboard = () => {
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedDept, setSelectedDept] = useState('CS');
     const [deptStudents, setDeptStudents] = useState([]);
@@ -63,6 +65,14 @@ const HODDashboard = () => {
     // Pending Approvals State
     const [pendingApprovals, setPendingApprovals] = useState([]);
     const [approvalLoading, setApprovalLoading] = useState(false);
+    const [expandedApprovals, setExpandedApprovals] = useState({});
+
+    const toggleExpansion = (index) => {
+        setExpandedApprovals(prev => ({
+            ...prev,
+            [index]: !prev[index]
+        }));
+    };
 
     const menuItems = [
         { label: 'Dashboard Overview', path: '#overview', icon: <LayoutDashboard size={20} />, active: activeTab === 'overview', onClick: () => setActiveTab('overview') },
@@ -83,7 +93,7 @@ const HODDashboard = () => {
         data.department = selectedDept;
 
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
             const baseUrl = API_BASE.replace('/marks', '/hod');
 
@@ -111,7 +121,7 @@ const HODDashboard = () => {
         if (activeTab === 'faculty' && isMyDept) {
             const fetchFaculty = async () => {
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                     const baseUrl = API_BASE.replace('/marks', '/hod');
                     const response = await fetch(`${baseUrl}/faculty?department=${selectedDept}`, { headers });
@@ -133,7 +143,7 @@ const HODDashboard = () => {
             const fetchPendingApprovals = async () => {
                 setApprovalLoading(true);
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                     const response = await fetch(`${API_BASE}/pending?department=${selectedDept}`, { headers });
                     if (response.ok) {
@@ -181,7 +191,7 @@ const HODDashboard = () => {
         if (isMyDept && selectedDept) {
             const fetchAnalytics = async () => {
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                     const res = await fetch(`http://127.0.0.1:8083/api/analytics/department/${selectedDept}/stats`, { headers });
                     if (res.ok) { setAnalytics(await res.json()); }
@@ -232,7 +242,7 @@ const HODDashboard = () => {
         data.cieNumber = scheduleForm.cieNumber;
 
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
             const baseUrl = API_BASE.replace('/marks', '/hod');
 
@@ -254,7 +264,7 @@ const HODDashboard = () => {
         if ((activeTab === 'cie-schedule' || activeTab === 'lesson-plans') && isMyDept) {
             const fetchSubjects = async () => {
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                     const baseUrl = 'http://127.0.0.1:8083/api/subjects';
                     const response = await fetch(`${baseUrl}/department/${selectedDept}`, { headers });
@@ -293,7 +303,7 @@ const HODDashboard = () => {
     const handleApproveMarks = async (subjectId, iaType) => {
         if (!window.confirm(`Are you sure you want to APPROVE marks for ${iaType}? This will lock these marks.`)) return;
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = { 'Authorization': `Bearer ${token}` };
             const response = await fetch(`${API_BASE}/approve?subjectId=${subjectId}&iaType=${iaType}`, {
                 method: 'POST',
@@ -315,7 +325,7 @@ const HODDashboard = () => {
     const handleRejectMarks = async (subjectId, iaType) => {
         if (!window.confirm(`Are you sure you want to REJECT marks for ${iaType}? Faculty will need to resubmit.`)) return;
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = { 'Authorization': `Bearer ${token}` };
             const response = await fetch(`${API_BASE}/reject?subjectId=${subjectId}&iaType=${iaType}`, {
                 method: 'POST',
@@ -648,7 +658,7 @@ const HODDashboard = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {approval.marks?.slice(0, 3).map(st => (
+                                                        {(expandedApprovals[idx] ? approval.marks : approval.marks?.slice(0, 3)).map(st => (
                                                             <tr key={st.studentId}>
                                                                 <td>{st.regNo}</td>
                                                                 <td>{st.studentName}</td>
@@ -656,8 +666,15 @@ const HODDashboard = () => {
                                                             </tr>
                                                         ))}
                                                         {approval.marks?.length > 3 && (
-                                                            <tr>
-                                                                <td colSpan="3" style={{ textAlign: 'center', color: '#6b7280' }}>+ {approval.marks.length - 3} more records</td>
+                                                            <tr
+                                                                onClick={() => toggleExpansion(idx)}
+                                                                style={{ cursor: 'pointer', background: '#f8fafc' }}
+                                                            >
+                                                                <td colSpan="3" style={{ textAlign: 'center', color: '#2563eb', fontWeight: 500 }}>
+                                                                    {expandedApprovals[idx]
+                                                                        ? 'Show Less'
+                                                                        : `+ ${approval.marks.length - 3} more records (Click to expand)`}
+                                                                </td>
                                                             </tr>
                                                         )}
                                                     </tbody>

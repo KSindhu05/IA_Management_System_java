@@ -520,16 +520,21 @@
 
 .searchIcon {
     position: absolute;
-    left: 0.75rem;
+    left: 1rem;
+    /* Adjusted for larger padding */
     color: #9ca3af;
 }
 
 .searchInput {
-    padding: 0.6rem 1rem 0.6rem 2.5rem;
+    padding: 0.75rem 1rem 0.75rem 3rem;
+    /* Increased padding */
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    width: 250px;
+    border-radius: 10px;
+    /* Larger radius */
+    font-size: 1rem;
+    /* Larger font */
+    width: 320px;
+    /* Increased width */
     background: white;
     transition: all 0.2s;
 }

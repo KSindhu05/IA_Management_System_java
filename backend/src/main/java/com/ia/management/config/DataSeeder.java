@@ -36,32 +36,58 @@ public class DataSeeder implements CommandLineRunner {
     // ... existing ...
 
     private Student createStudentIfNotFound(String regNo, String name, String phone) {
-        return studentRepository.findAll().stream()
-                .filter(s -> s.getRegNo().equals(regNo))
-                .findFirst()
-                .orElseGet(() -> {
-                    Student s = new Student();
-                    s.setRegNo(regNo);
-                    s.setName(name);
-                    s.setDepartment("CS");
-                    s.setSemester("2nd");
-                    s.setSection("A");
-                    s.setPhoneNo(phone);
-                    s.setEmail(regNo.toLowerCase() + "@student.college.edu");
+        // Use proper repository method instead of findAll().stream()
+        Optional<Student> existing = studentRepository.findByRegNo(regNo);
+        
+        if (existing.isPresent()) {
+            Student student = existing.get();
+            // CRITICAL: Check if student has a User, create one if missing
+            if (student.getUser() == null) {
+                System.out.println("Found student without User: " + regNo + ", creating User now");
+                User user = new User();
+                user.setUsername(regNo);
+                user.setPassword(passwordEncoder.encode("password"));
+                user.setRole(User.Role.STUDENT);
+                user.setAssociatedId(regNo);
+                
+                User savedUser = userRepository.save(user);
+                student.setUser(savedUser);
+                student = studentRepository.save(student);
+                System.out.println("User created and linked to student: " + regNo);
+            }
+            return student;
+        }
+        
+        // Student doesn't exist, create new one
+        Student s = new Student();
+        s.setRegNo(regNo);
+        s.setName(name);
+        s.setDepartment("CS");
+        s.setSemester("2nd");
+        s.setSection("A");
+        s.setPhoneNo(phone);
+        s.setEmail(regNo.toLowerCase() + "@student.college.edu");
 
-                    // Create User Account
-                    User user = new User();
-                    user.setUsername(regNo);
-                    user.setPassword(passwordEncoder.encode("password")); // Encoded password
-                    user.setRole(User.Role.STUDENT);
-                    user.setAssociatedId(regNo);
+        // Create User Account
+        User user = new User();
+        user.setUsername(regNo);
+        user.setPassword(passwordEncoder.encode("password")); // Encoded password
+        user.setRole(User.Role.STUDENT);
+        user.setAssociatedId(regNo);
 
-                    // Cascade save or save user first
-                    // Since OneToOne cascade is ALL, saving student should save user if set
-                    s.setUser(user);
+        // IMPORTANT: Save user FIRST before setting on student
+        // This prevents foreign key constraint violations
+        System.out.println("Creating new student and user: " + regNo);
+        User savedUser = userRepository.save(user);
+        System.out.println("User saved with ID: " + savedUser.getId() + ", username: " + savedUser.getUsername());
+        
+        // Now set the saved user on the student
+        s.setUser(savedUser);
 
-                    return studentRepository.save(s);
-                });
+        Student savedStudent = studentRepository.save(s);
+        System.out.println("Student saved: " + savedStudent.getName() + " with user ID: " + savedStudent.getUser().getId());
+        return savedStudent;
+    }
     }
 
     @Override
@@ -349,47 +375,59 @@ public class DataSeeder implements CommandLineRunner {
                 "459CS25063,MARUTHI H,Python,23,100,9110646963"
         };
 
+        System.out.println("Processing " + studentData.length + " student data rows...");
+        int processedCount = 0;
         for (String row : studentData) {
-            String[] parts = row.split(",");
-            if (parts.length < 6)
-                continue;
+            try {
+                String[] parts = row.split(",");
+                if (parts.length < 6)
+                    continue;
 
-            String regNo = parts[0].trim();
-            String name = parts[1].trim();
-            String subjectName = parts[2].trim();
-            String marksStr = parts[3].trim();
-            String attendanceStr = parts[4].trim();
-            String phone = parts[5].trim();
+                String regNo = parts[0].trim();
+                String name = parts[1].trim();
+                String subjectName = parts[2].trim();
+                String marksStr = parts[3].trim();
+                String attendanceStr = parts[4].trim();
+                String phone = parts[5].trim();
 
-            // Create Student
-            Student student = createStudentIfNotFound(regNo, name, phone);
-
-            // Find Subject
-            Subject subject = subjectRepository.findAll().stream()
-                    .filter(s -> s.getName().equalsIgnoreCase(subjectName))
-                    .findFirst()
-                    .orElse(null);
-
-            if (subject != null) {
-                // Parse Marks with 'A'/'AB' handling
-                Double marks = 0.0;
-                if (!marksStr.equalsIgnoreCase("A") && !marksStr.equalsIgnoreCase("AB")) {
-                    marks = parseDouble(marksStr);
+                // Create Student
+                Student student = createStudentIfNotFound(regNo, name, phone);
+                processedCount++;
+                if (processedCount % 50 == 0) {
+                    System.out.println("Processed " + processedCount + " rows...");
                 }
 
-                // Parse Attendance
-                Integer attendance = 0;
-                if (!attendanceStr.equalsIgnoreCase("A") && !attendanceStr.equalsIgnoreCase("AB")) {
-                    try {
-                        attendance = (int) Double.parseDouble(attendanceStr);
-                    } catch (Exception e) {
+                // Find Subject
+                Subject subject = subjectRepository.findAll().stream()
+                        .filter(s -> s.getName().equalsIgnoreCase(subjectName))
+                        .findFirst()
+                        .orElse(null);
+
+                if (subject != null) {
+                    // Parse Marks with 'A'/'AB' handling
+                    Double marks = 0.0;
+                    if (!marksStr.equalsIgnoreCase("A") && !marksStr.equalsIgnoreCase("AB")) {
+                        marks = parseDouble(marksStr);
                     }
-                }
 
-                // Create Marks Entry
-                createMarks(student, subject, marks, 0.0, attendance);
+                    // Parse Attendance
+                    Integer attendance = 0;
+                    if (!attendanceStr.equalsIgnoreCase("A") && !attendanceStr.equalsIgnoreCase("AB")) {
+                        try {
+                            attendance = (int) Double.parseDouble(attendanceStr);
+                        } catch (Exception e) {
+                        }
+                    }
+
+                    // Create Marks Entry
+                    createMarks(student, subject, marks, 0.0, attendance);
+                }
+            } catch (Exception e) {
+                System.err.println("Error processing row: " + row);
+                e.printStackTrace();
             }
         }
+        System.out.println("Total rows processed: " + processedCount);
 
         System.out.println("Database Seeded Successfully with Real Data!");
     }

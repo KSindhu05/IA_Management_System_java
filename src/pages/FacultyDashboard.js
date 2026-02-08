@@ -139,7 +139,7 @@ const FacultyDashboard = () => {
                 status: (currentData[s.id] || 'Present').toUpperCase()
             }));
 
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
 
             const res = await fetch(`http://127.0.0.1:8083/api/attendance/update`, {
@@ -172,7 +172,7 @@ const FacultyDashboard = () => {
         if (activeSection === 'Attendance' && selectedSubject && attendanceDate) {
             const fetchAtt = async () => {
                 try {
-                    const token = localStorage.getItem('token');
+                    const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
                     const res = await fetch(`http://127.0.0.1:8083/api/attendance?subjectId=${selectedSubject.id}&date=${attendanceDate}`, { headers });
                     if (res.ok) {
@@ -236,7 +236,7 @@ const FacultyDashboard = () => {
 
     const fetchSchedule = async () => {
         try {
-            const token = localStorage.getItem('token'); // Assuming auth token
+            const token = user?.token; // Assuming auth token
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
             // Fix API Base URL usage
@@ -279,7 +279,7 @@ const FacultyDashboard = () => {
         }
 
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = {
                 'Content-Type': 'application/json',
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -422,7 +422,7 @@ const FacultyDashboard = () => {
         setIsLocked(false);
 
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
             const res = await fetch(`${API_BASE}/subject/${subject.id}`, { headers });
 
@@ -463,41 +463,7 @@ const FacultyDashboard = () => {
         }
     };
 
-    const handleSubmitForApproval = async () => {
-        if (!selectedSubject) return;
-        const confirm = window.confirm("Are you sure you want to SUBMIT marks to HOD? You will not be able to edit them afterwards.");
-        if (!confirm) return;
 
-        setSaving(true);
-        try {
-            // We need to submit for EACH IA type or All? 
-            // The backend supports subject+iaType.
-            // Currently the UI shows all columns.
-            // Let's assume we submit ALL types present? Or ask user?
-            // Simplification: We submit 'CIE1' as default or loop through all.
-            // Ideally we should have a selector for which IA to submit?
-            // The current UI shows all 5 columns.
-            // Let's submit ALL types.
-            const types = ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'];
-            const token = localStorage.getItem('token');
-            const headers = { 'Authorization': `Bearer ${token}` };
-
-            for (const type of types) {
-                await fetch(`${API_BASE}/submit?subjectId=${selectedSubject.id}&iaType=${type}`, {
-                    method: 'POST',
-                    headers
-                });
-            }
-
-            setIsLocked(true);
-            showToast('Marks Submitted for Approval!', 'success');
-        } catch (e) {
-            console.error(e);
-            showToast('Error submitting marks', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const handleMarkChange = (studentId, field, value) => {
         let numValue = parseInt(value, 10);
@@ -583,7 +549,7 @@ const FacultyDashboard = () => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = user?.token;
             const headers = {
                 'Content-Type': 'application/json',
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -647,6 +613,40 @@ const FacultyDashboard = () => {
         } catch (e) {
             console.error(e);
             showToast('Error saving marks', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSubmitForApproval = async () => {
+        // Prompt for CIE Type
+        const cieType = window.prompt("Enter Assessment Type to Submit (e.g., CIE1, CIE2, CIE3):", "CIE1");
+        if (!cieType) return;
+
+        setSaving(true);
+        try {
+            const token = user?.token;
+            const headers = {
+                'Authorization': `Bearer ${token}`
+            };
+
+            // Call Submit Endpoint
+            // Node.js backend expects query params: ?subjectId=...&cieType=...
+            const res = await fetch(`${API_BASE}/submit?subjectId=${selectedSubject.id}&cieType=${cieType.toUpperCase()}`, {
+                method: 'POST',
+                headers
+            });
+
+            if (res.ok) {
+                showToast(`Marks for ${cieType} submitted to HOD!`, 'success');
+                setIsLocked(true);
+            } else {
+                const err = await res.text();
+                showToast('Submission failed: ' + err, 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            showToast('Error submitting marks', 'error');
         } finally {
             setSaving(false);
         }
@@ -1055,7 +1055,7 @@ const FacultyDashboard = () => {
                     <h2 className={styles.sectionTitle}>My Students Directory</h2>
                     <div className={styles.headerActions}>
                         <div className={styles.searchWrapper}>
-                            <Search size={16} className={styles.searchIcon} />
+                            <Search size={20} className={styles.searchIcon} />
                             <input
                                 type="text"
                                 placeholder="Search student..."

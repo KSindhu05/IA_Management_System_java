@@ -37,7 +37,7 @@ public class MarksService {
     private UserRepository userRepository;
 
     public List<CIEMark> getMarksForSubject(Long subjectId) {
-        return cieMarkRepository.findAll();
+        return cieMarkRepository.findBySubjectId(subjectId);
     }
 
     public List<CIEMark> getMarksByStudentAndSubject(Long studentId, Long subjectId) {
