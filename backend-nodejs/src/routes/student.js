@@ -39,6 +39,27 @@ router.get('/dashboard', authMiddleware, roleMiddleware('STUDENT'), async (req, 
     }
 });
 
+// Get all students (for faculty/HOD)
+router.get('/all', authMiddleware, roleMiddleware('ADMIN', 'FACULTY', 'HOD', 'PRINCIPAL'), async (req, res) => {
+    try {
+        const { department } = req.query;
+        const whereClause = {};
+        if (department) {
+            whereClause.department = department;
+        }
+
+        const students = await Student.findAll({
+            where: whereClause,
+            attributes: ['id', 'regNo', 'name', 'department', 'semester', 'section', 'email', 'phoneNo', 'parentPhone'],
+            order: [['regNo', 'ASC']]
+        });
+        res.json(students);
+    } catch (error) {
+        console.error('Get all students error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 // Get Student Profile
 router.get('/profile', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
     try {

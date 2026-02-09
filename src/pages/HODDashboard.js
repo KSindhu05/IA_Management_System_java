@@ -47,6 +47,11 @@ const HODDashboard = () => {
     const [editingMarks, setEditingMarks] = useState({});
     const [viewingSubject, setViewingSubject] = useState(null);
 
+    // Student Profile State
+    const [selectedStudentProfile, setSelectedStudentProfile] = useState(null);
+    const [studentMarksProfile, setStudentMarksProfile] = useState([]);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+
     // API State
     const [subjects, setSubjects] = useState([]);
     const [students, setStudents] = useState([]);
@@ -85,7 +90,8 @@ const HODDashboard = () => {
         { label: 'CIE Schedule', path: '#cie-schedule', icon: <Calendar size={20} />, active: activeTab === 'cie-schedule', onClick: () => setActiveTab('cie-schedule') },
         { label: 'IA Monitoring', path: '#monitoring', icon: <Activity size={20} />, active: activeTab === 'monitoring', onClick: () => setActiveTab('monitoring') },
         { label: 'Student Performance', path: '#performance', icon: <TrendingUp size={20} />, active: activeTab === 'performance', onClick: () => setActiveTab('performance') },
-        { label: 'Faculty Management', path: '#faculty', icon: <Users size={20} />, active: activeTab === 'faculty', onClick: () => setActiveTab('faculty') },
+        { label: 'Faculty Management', path: '#faculty', icon: <Briefcase size={20} />, active: activeTab === 'faculty', onClick: () => setActiveTab('faculty') },
+        { label: 'All Students', path: '#all-students', icon: <Users size={20} />, active: activeTab === 'all-students', onClick: () => setActiveTab('all-students') },
         { label: 'IA Approval Panel', path: '#approvals', icon: <CheckCircle size={20} />, active: activeTab === 'approvals', onClick: () => setActiveTab('approvals') },
         { label: 'Update Marks', path: '#marks', icon: <PenTool size={20} />, active: activeTab === 'update-marks', onClick: () => setActiveTab('update-marks') },
         { label: 'Notifications', path: '#notifications', icon: <Bell size={20} />, active: activeTab === 'notifications', onClick: () => setActiveTab('notifications') },
@@ -201,7 +207,7 @@ const HODDashboard = () => {
                 try {
                     const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                    const response = await fetch(`${API_BASE}/pending?department=${selectedDept}`, { headers });
+                    const response = await fetch(`${API_BASE_URL}/marks/pending?department=${selectedDept}`, { headers });
                     if (response.ok) {
                         const data = await response.json();
                         setPendingApprovals(data);
@@ -217,23 +223,34 @@ const HODDashboard = () => {
     }, [activeTab, isMyDept, selectedDept]);
 
     useEffect(() => {
-        const userDept = 'CS';
-        const isAuthorized = selectedDept === userDept;
-        setIsMyDept(isAuthorized);
+        const userDept = 'CS'; // TODO: Get from user profile if strictly enforcing
+        const isAuthorized = selectedDept === userDept; // For now assuming admin/HOD access
+        setIsMyDept(true); // Allow viewing specific departments
 
-        if (isAuthorized) {
-            const fetchedStudents = getStudentsByDept(selectedDept);
-            setDeptStudents(fetchedStudents);
-            setStudents(fetchedStudents);
-
-            if (subjectsByDept[selectedDept]) {
-                // Mock data removed in favor of real API fetch
-                // const richSubjects = subjectsByDept[selectedDept].map...
+        const fetchStudents = async () => {
+            try {
+                const token = user?.token;
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const response = await fetch(`${API_BASE_URL}/student/all?department=${selectedDept}`, { headers });
+                if (response.ok) {
+                    const data = await response.json();
+                    setDeptStudents(data);
+                    setStudents(data);
+                } else {
+                    setDeptStudents([]);
+                    setStudents([]);
+                }
+            } catch (e) {
+                console.error("Failed to fetch students", e);
             }
+        };
+
+        if (selectedDept) {
+            fetchStudents();
         } else {
             setDeptStudents([]); setStudents([]); setSubjects([]); setSelectedSubject(null);
         }
-    }, [selectedDept]);
+    }, [selectedDept, user]);
 
     useEffect(() => {
         if (isMyDept && selectedDept) {
@@ -250,23 +267,36 @@ const HODDashboard = () => {
     }, [isMyDept, selectedDept]);
 
     useEffect(() => {
-        if (selectedSubject && selectedSubject.id && students.length > 0) {
-            const marksMap = {};
-            students.forEach((student, index) => {
-                let cie1, cie2;
-                if (selectedSubject.name === 'English Communication') { const val = englishMarks[index]; cie1 = val; cie2 = 0; }
-                else if (selectedSubject.name === 'Engineering Maths-II') { const val = mathsMarks[index]; if (val) { cie1 = val.cie1; cie2 = val.cie2; } else { cie1 = 0; cie2 = 0; } }
-                else {
-                    const max1 = selectedSubject.cie1MaxMarks || 35;
-                    const max2 = selectedSubject.cie2MaxMarks || 15;
-                    cie1 = max1 > 0 ? Math.floor(Math.random() * (max1 - 5)) + 5 : 0;
-                    cie2 = max2 > 0 ? Math.floor(Math.random() * (max2 - 2)) + 2 : 0;
+        if (selectedSubject && selectedSubject.id) {
+            const fetchMarks = async () => {
+                try {
+                    const token = user?.token;
+                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                    const response = await fetch(`${API_BASE_URL}/marks/subject/${selectedSubject.id}`, { headers });
+
+                    if (response.ok) {
+                        const marksData = await response.json();
+                        console.log('Fetched Marks for Subject ' + selectedSubject.id, marksData);
+                        const marksMap = {};
+
+                        // Populate editingMarks from DB data
+                        marksData.forEach(m => {
+                            if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
+                            if (m.cieType === 'CIE1') marksMap[m.studentId].cie1 = m.marks;
+                            if (m.cieType === 'CIE2') marksMap[m.studentId].cie2 = m.marks;
+                            if (m.cieType === 'CIE3') marksMap[m.studentId].cie3 = m.marks;
+                            if (m.cieType === 'CIE4') marksMap[m.studentId].cie4 = m.marks;
+                            if (m.cieType === 'CIE5') marksMap[m.studentId].cie5 = m.marks;
+                        });
+                        setEditingMarks(marksMap);
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch marks for editing", e);
                 }
-                marksMap[student.id] = { 'IA1': { student: { id: student.id }, iaType: 'IA1', cie1Score: cie1, cie2Score: cie2 } };
-            });
-            setSubjectMarks(marksMap);
+            };
+            fetchMarks();
         }
-    }, [selectedSubject, students]);
+    }, [selectedSubject]);
 
     useEffect(() => {
         if (isMyDept && selectedDept === 'CS') {
@@ -339,15 +369,42 @@ const HODDashboard = () => {
     };
 
     const saveMarks = async () => {
-        alert("Success: Marks have been effectively updated in the local state (Mock Mode).");
-        setEditingMarks({});
-        const newMarksMap = { ...subjectMarks };
-        Object.keys(editingMarks).forEach(stdId => {
-            if (!newMarksMap[stdId]) newMarksMap[stdId] = { 'IA1': { student: { id: stdId } } };
-            if (editingMarks[stdId].cie1 !== undefined) newMarksMap[stdId]['IA1'].cie1Score = editingMarks[stdId].cie1;
-            if (editingMarks[stdId].cie2 !== undefined) newMarksMap[stdId]['IA1'].cie2Score = editingMarks[stdId].cie2;
+        if (!selectedSubject) return;
+
+        const payload = [];
+        Object.keys(editingMarks).forEach(studentId => {
+            const marks = editingMarks[studentId];
+            if (marks.cie1 !== undefined) payload.push({ studentId, subjectId: selectedSubject.id, iaType: 'CIE1', co1: marks.cie1 });
+            if (marks.cie2 !== undefined) payload.push({ studentId, subjectId: selectedSubject.id, iaType: 'CIE2', co1: marks.cie2 });
+            if (marks.cie3 !== undefined) payload.push({ studentId, subjectId: selectedSubject.id, iaType: 'CIE3', co1: marks.cie3 });
+            if (marks.cie4 !== undefined) payload.push({ studentId, subjectId: selectedSubject.id, iaType: 'CIE4', co1: marks.cie4 });
+            if (marks.cie5 !== undefined) payload.push({ studentId, subjectId: selectedSubject.id, iaType: 'CIE5', co1: marks.cie5 });
         });
-        setSubjectMarks(newMarksMap);
+
+        if (payload.length === 0) {
+            alert("No changes to save.");
+            return;
+        }
+
+        try {
+            const token = user?.token;
+            const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+            const response = await fetch(`${API_BASE_URL}/marks/update/batch`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                alert('Marks updated successfully!');
+            } else {
+                const err = await response.text();
+                alert('Failed to update marks: ' + err);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error updating marks');
+        }
     };
 
     const handleApproveMarks = async (subjectId, iaType) => {
@@ -355,7 +412,7 @@ const HODDashboard = () => {
         try {
             const token = user?.token;
             const headers = { 'Authorization': `Bearer ${token}` };
-            const response = await fetch(`${API_BASE}/approve?subjectId=${subjectId}&iaType=${iaType}`, {
+            const response = await fetch(`${API_BASE_URL}/marks/approve?subjectId=${subjectId}&iaType=${iaType}`, {
                 method: 'POST',
                 headers
             });
@@ -377,7 +434,7 @@ const HODDashboard = () => {
         try {
             const token = user?.token;
             const headers = { 'Authorization': `Bearer ${token}` };
-            const response = await fetch(`${API_BASE}/reject?subjectId=${subjectId}&iaType=${iaType}`, {
+            const response = await fetch(`${API_BASE_URL}/marks/reject?subjectId=${subjectId}&iaType=${iaType}`, {
                 method: 'POST',
                 headers
             });
@@ -394,6 +451,49 @@ const HODDashboard = () => {
         }
     };
 
+    const handleUnlockMarks = async (subjectId, iaType, subjectName) => {
+        const reason = prompt(`Why are you unlocking ${subjectName} ${iaType} marks?\n(Optional - press OK to skip)`);
+
+        if (reason === null) return; // User clicked Cancel
+
+        if (!window.confirm(`Are you sure you want to UNLOCK ${subjectName} ${iaType} marks?\n\nThis will change the status from APPROVED to PENDING, allowing faculty to edit them again.`)) {
+            return;
+        }
+
+        try {
+            const token = user?.token;
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+
+            const response = await fetch(`${API_BASE_URL}/marks/unlock`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    subjectId,
+                    iaType,
+                    reason: reason || null
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                alert(`Success: ${result.message || 'Marks unlocked successfully!'}\n\nFaculty can now edit these marks.`);
+                // Reload page to show updated status
+                window.location.reload();
+            } else {
+                const err = await response.json();
+                console.error('Unlock failed response:', err);
+                alert(`Failed to unlock: ${err.message || 'Unknown error'} (Status: ${response.status})`);
+            }
+        } catch (e) {
+            console.error('Unlock error:', e);
+            alert(`Error unlocking marks: ${e.message}. Check console for details.`);
+        }
+    };
+
+
     const AccessDeniedView = () => (
         <div className={styles.accessDeniedContainer}>
             <div className={styles.deniedContent}>
@@ -408,6 +508,133 @@ const HODDashboard = () => {
             </div>
         </div>
     );
+
+    const fetchStudentProfile = async (student) => {
+        try {
+            setSelectedStudentProfile(student);
+            setStudentMarksProfile([]);
+            setShowProfileModal(true);
+
+            const token = user?.token;
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            const response = await fetch(`${API_BASE_URL}/marks/student/${student.id}`, { headers });
+
+            if (response.ok) {
+                const data = await response.json();
+                setStudentMarksProfile(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch student profile marks", e);
+        }
+    };
+
+    const renderAllStudents = () => (
+        <div className={styles.sectionContainer}>
+            <div className={styles.sectionHeader} style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className={styles.sectionTitle} style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1e293b' }}>All Students ({deptStudents.length})</h2>
+                <div className={styles.headerActions}>
+                    <button className={styles.primaryBtn} onClick={() => alert("Export Feature Coming Soon")}>
+                        <Download size={18} /> Export List
+                    </button>
+                </div>
+            </div>
+            <div className={styles.tableContainer} style={{ background: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                <table className={styles.table}>
+                    <thead>
+                        <tr>
+                            <th style={{ width: '60px' }}>Sl. No</th>
+                            <th>Reg No</th>
+                            <th>Student Name</th>
+                            <th>Sem / Sec</th>
+                            <th>Parent Phone</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {deptStudents.map((std, index) => (
+                            <tr key={std.id}>
+                                <td style={{ color: '#64748b' }}>{index + 1}</td>
+                                <td style={{ fontWeight: 600, color: '#1e293b' }}>{std.regNo}</td>
+                                <td>{std.name}</td>
+                                <td>{std.semester} - {std.section || 'A'}</td>
+                                <td>{std.parentPhone || '-'}</td>
+                                <td>
+                                    <button
+                                        className={styles.secondaryBtn}
+                                        onClick={() => fetchStudentProfile(std)}
+                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                        <Users size={14} /> View Profile
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+
+    const renderStudentProfileModal = () => {
+        if (!showProfileModal || !selectedStudentProfile) return null;
+
+        return (
+            <div className={styles.modalOverlay}>
+                <div className={styles.modalContent} style={{ maxWidth: '800px', width: '90%' }}>
+                    <div className={styles.modalHeader}>
+                        <div>
+                            <h3 className={styles.modalTitle}>{selectedStudentProfile.name}</h3>
+                            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                                {selectedStudentProfile.regNo} | {selectedStudentProfile.semester} Sem | Section {selectedStudentProfile.section || 'A'}
+                            </p>
+                            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.9rem' }}>
+                                Parent Contact: <strong>{selectedStudentProfile.parentPhone || 'Not Available'}</strong>
+                            </p>
+                        </div>
+                        <button className={styles.closeBtn} onClick={() => setShowProfileModal(false)}>
+                            <X size={24} />
+                        </button>
+                    </div>
+                    <div className={styles.modalBody}>
+                        <h4 style={{ marginBottom: '1rem', color: '#334155' }}>CIE Marks Overview</h4>
+                        {studentMarksProfile.length > 0 ? (
+                            <table className={styles.table} style={{ border: '1px solid #e2e8f0' }}>
+                                <thead style={{ background: '#f8fafc' }}>
+                                    <tr>
+                                        <th>Subject</th>
+                                        <th>CIE Type</th>
+                                        <th>Marks Obtained</th>
+                                        <th>Max Marks</th>
+                                        <th>Attendance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {studentMarksProfile.map((mark, idx) => (
+                                        <tr key={idx}>
+                                            <td>
+                                                <div style={{ fontWeight: 500 }}>{mark.subjectName}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{mark.subjectCode}</div>
+                                            </td>
+                                            <td><span className={styles.statusBadge} style={{ background: '#e0f2fe', color: '#0369a1' }}>{mark.cieType}</span></td>
+                                            <td style={{ fontWeight: 600 }}>{mark.marks}</td>
+                                            <td style={{ color: '#64748b' }}>{mark.maxMarks}</td>
+                                            <td>{mark.attendance}%</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px' }}>
+                                No marks found for this student.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+
 
     return (
         <div className={styles.dashboardContainer}>
@@ -451,6 +678,7 @@ const HODDashboard = () => {
                                     </div>
                                 </div>
                             )}
+                            {activeTab === 'all-students' && renderAllStudents()}
                             {activeTab === 'overview' && (<div className={styles.overviewContainer}><div className={styles.statsRow}><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.blue}`}><Users size={24} /></div><div className={styles.statInfo}><p>Total Students</p><h3>{deptStudents.length || 0}</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.green}`}><Briefcase size={24} /></div><div className={styles.statInfo}><p>Faculty Members</p><h3>{facultyList.length || 0}</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.purple}`}><FileText size={24} /></div><div className={styles.statInfo}><p>Dept. Average</p><h3>{analytics ? analytics.average : '-'}</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.orange}`}><Activity size={24} /></div><div className={styles.statInfo}><p>Pass Percentage</p><h3>{analytics ? analytics.passPercentage : '-'}%</h3></div></div></div><div className={styles.card} style={{ marginBottom: '1.5rem', padding: '1rem' }}><div className={styles.quickActions}><button className={styles.quickBtn} onClick={() => alert('Broadcasting message to all faculty...')}><Bell size={20} className={styles.textBlue} /><span>Broadcast Message</span></button><button className={styles.quickBtn} onClick={() => alert('Scheduling dept meeting...')}><Clock size={20} className={styles.textPurple} /><span>Schedule Meeting</span></button><button className={styles.quickBtn} onClick={() => alert('Downloading monthly report...')}><FileText size={20} className={styles.textGreen} /><span>Monthly Report</span></button><button className={styles.quickBtn} onClick={() => setActiveTab('update-marks')}><Edit size={20} className={styles.textOrange} /><span>Update Marks</span></button></div></div><div className={styles.gridTwoOne}><div className={styles.leftColumn}><div className={styles.card} style={{ marginBottom: '1.5rem' }}><div className={styles.cardHeader}><h3>Department Performance (Avg IA Score)</h3></div><div className={styles.circlesContainer}><div className={styles.circlesContainer}>{analytics ? [{ label: 'Avg Percentage', value: Math.round(((analytics.average || 0) / 50) * 100) }, { label: 'Pass Rate', value: analytics.passPercentage || 0 }, { label: 'Risk Factor', value: deptStudents.length > 0 ? Math.round(((analytics.atRiskCount || 0) / deptStudents.length) * 100) : 0 }].map((metric, index) => { const data = { labels: ['Metric', 'Remaining'], datasets: [{ data: [metric.value, 100 - metric.value], backgroundColor: ['#8b5cf6', '#f3f4f6'], borderWidth: 0, cutout: '70%' }] }; return (<div key={index} className={styles.circleItem}><div style={{ height: '120px', width: '120px', position: 'relative' }}><Doughnut data={data} options={{ ...doughnutOptions, plugins: { legend: { display: false }, tooltip: { enabled: false } } }} /><div className={styles.circleLabel}><span className={styles.circleValue}>{metric.value}%</span></div></div><p className={styles.circleName}>{metric.label}</p></div>); }) : <p style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Loading Analytics...</p>}</div></div></div></div><div className={styles.rightColumn}><div className={styles.card}><div className={styles.cardHeader}><h3>Recent Alerts</h3></div><div className={styles.alertList}>{departmentAlerts.map(alert => (<div key={alert.id} className={`${styles.alertItem} ${styles[alert.type]}`}><AlertTriangle size={16} /><div><p>{alert.message}</p><span>{alert.date}</span></div></div>))}</div></div></div></div></div>)}
                             {activeTab === 'update-marks' && (
                                 <div className={styles.updateMarksContainer}>
@@ -495,7 +723,7 @@ const HODDashboard = () => {
                                                                 <td>{index + 1}</td>
                                                                 <td>{student.regNo}</td>
                                                                 <td>{student.name}</td>
-                                                                <td>{student.sem} - {student.section}</td>
+                                                                <td>{student.semester} - {student.section}</td>
                                                                 <td><input type="number" className={styles.markInput} value={valCIE1} max={50} onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)} /></td>
                                                                 <td><input type="number" className={styles.markInput} value={valCIE2} max={50} onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)} /></td>
                                                                 <td><input type="number" className={styles.markInput} value={valCIE3} max={50} onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)} /></td>
@@ -698,6 +926,7 @@ const HODDashboard = () => {
                                     </div>
                                 </div>
                             )}
+                            {activeTab === 'all-students' && renderAllStudents()}
                             {activeTab === 'faculty' && (<div className={styles.facultyContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Department Faculty</h3><button className={styles.primaryBtn} onClick={() => setShowAddFacultyModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Users size={16} /> Add New Faculty</button></div><div className={styles.facultyList} style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.5rem' }}>{facultyList.length > 0 ? facultyList.map(fac => (<div key={fac.id} className={styles.facultyItem} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem', background: 'white' }}><div className={styles.facProfile} style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}><div className={styles.avatarSm} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>{fac.fullName ? fac.fullName.charAt(0) : fac.username.charAt(0)}</div><div><p className={styles.facName} style={{ fontWeight: 600, fontSize: '1.1rem', color: '#1e293b', margin: 0 }}>{fac.fullName || fac.username}</p><small className={styles.facStatus} style={{ color: '#64748b' }}>{fac.designation}</small></div></div><div style={{ marginBottom: '1rem' }}><span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Subjects</span><div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>{fac.subjects && fac.subjects.length > 0 ? fac.subjects.map((sub, i) => (<span key={i} style={{ fontSize: '0.8rem', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', color: '#475569' }}>{sub}</span>)) : (<span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>No active subjects</span>)}</div></div><div className={styles.facActions} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}><button className={styles.secondaryBtn} style={{ fontSize: '0.9rem', padding: '0.5rem', width: '100%', justifyContent: 'center' }} onClick={() => alert(`Navigating to dashboard of ${fac.username}...`)}>View Dashboard</button><button className={styles.secondaryBtn} style={{ fontSize: '0.9rem', padding: '0.5rem', width: '100%', justifyContent: 'center' }} onClick={() => alert(`Start Chat with ${fac.username}`)}>Message</button></div></div>)) : (<div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', color: '#64748b' }}><Users size={48} style={{ marginBottom: '1rem', color: '#cbd5e1' }} /><p>No faculty members found for this department.</p></div>)}</div></div>{showAddFacultyModal && (<div className={styles.modalOverlay}><div className={styles.modalContent} style={{ maxWidth: '500px' }}><div className={styles.modalHeader}><h3>Add New Faculty</h3><button className={styles.closeBtn} onClick={() => setShowAddFacultyModal(false)}><X size={24} /></button></div><div className={styles.modalBody}><form onSubmit={handleAddFaculty} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}><div className={styles.formGroup}><label>Full Name</label><input name="fullName" required placeholder="e.g. Dr. John Doe" className={styles.input} /></div><div className={styles.formGroup}><label>Username</label><input name="username" required placeholder="jdoe" className={styles.input} /></div><div className={styles.formGroup}><label>Email</label><input name="email" type="email" required placeholder="john@college.edu" className={styles.input} /></div><div className={styles.formGroup}><label>Temporary Password</label><input name="password" required defaultValue="password123" className={styles.input} /></div><div className={styles.formGroup}><label>Designation</label><select name="designation" className={styles.input}><option>Assistant Professor</option><option>Associate Professor</option><option>Professor</option><option>Guest Faculty</option></select></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}><button type="button" className={styles.secondaryBtn} onClick={() => setShowAddFacultyModal(false)}>Cancel</button><button type="submit" className={styles.primaryBtn} style={{ background: '#2563eb', color: 'white' }}>Create Account</button></div></form></div></div></div>)}</div>)}
                             {activeTab === 'approvals' && (
                                 <div className={styles.approvalsContainer}>
@@ -758,6 +987,45 @@ const HODDashboard = () => {
                                             </div>
                                         ))
                                     )}
+                                    <div className={styles.card} style={{ marginTop: '1.5rem' }}>
+                                        <div className={styles.cardHeader}>
+                                            <h3>🔓 Unlock Approved Marks</h3>
+                                            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginTop: '0.5rem' }}>Unlock approved marks to allow faculty to make corrections</p>
+                                        </div>
+                                        <div style={{ padding: '1.5rem' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Subject</label>
+                                                    <select className={styles.select} id="unlockSubject" style={{ width: '100%', padding: '0.6rem' }}>
+                                                        <option value="">Select Subject</option>
+                                                        {subjects.filter(s => s.name !== 'IC').map(subject => (
+                                                            <option key={subject.id} value={subject.id}>{subject.name} - {subject.instructorName}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>CIE Type</label>
+                                                    <select className={styles.select} id="unlockCIE" style={{ width: '100%', padding: '0.6rem' }}>
+                                                        <option value="CIE1">CIE-1</option>
+                                                        <option value="CIE2">CIE-2</option>
+                                                        <option value="CIE3">CIE-3</option>
+                                                        <option value="CIE4">CIE-4</option>
+                                                        <option value="CIE5">CIE-5</option>
+                                                    </select>
+                                                </div>
+                                                <button className={styles.dangerBtn} onClick={() => {
+                                                    const subjectId = document.getElementById('unlockSubject').value;
+                                                    const cieType = document.getElementById('unlockCIE').value;
+                                                    if (!subjectId) { alert('Please select a subject'); return; }
+                                                    const subject = subjects.find(s => s.id === parseInt(subjectId));
+                                                    handleUnlockMarks(subjectId, cieType, subject?.name || 'Selected Subject');
+                                                }} style={{ padding: '0.6rem 1.5rem' }}>Unlock Marks</button>
+                                            </div>
+                                            <div style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '0.5rem', fontSize: '0.85rem' }}>
+                                                <strong>⚠️ Warning:</strong> Unlocking marks will change their status from APPROVED to PENDING, allowing faculty to edit them again.
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                             {activeTab === 'analytics' && (<div className={styles.analyticsContainer}><div className={styles.gridTwo}><div className={styles.card}><h3>IA Submission Status</h3><div className={styles.doughnutContainer}><Pie data={iaSubmissionStatus} options={doughnutOptions} /></div></div><div className={styles.card}><h3>Year-on-Year Improvement</h3><div className={styles.chartContainer}><Line data={hodTrendData} options={commonOptions} /></div></div></div><div className={styles.card} style={{ marginTop: '1.5rem' }}><h3>Download Reports</h3><div className={styles.downloadOptions}><button className={styles.downloadBtn}><FileText size={16} /> Department IA Report (PDF)</button><button className={styles.downloadBtn}><FileText size={16} /> Consolidated Marks Sheet (Excel)</button><button className={styles.downloadBtn}><FileText size={16} /> Low Performers List (CSV)</button></div></div></div>)}
@@ -788,6 +1056,7 @@ const HODDashboard = () => {
                         </>
                     )}
                 </div>
+                {renderStudentProfileModal()}
             </main>
         </div>
     );

@@ -60,6 +60,33 @@ router.get('/my-marks', authMiddleware, roleMiddleware('STUDENT'), async (req, r
     }
 });
 
+// Get marks for a specific student (HOD/Faculty)
+router.get('/student/:studentId', authMiddleware, roleMiddleware('FACULTY', 'HOD', 'PRINCIPAL'), async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const marks = await CIEMark.findAll({
+            where: { studentId },
+            include: [{ model: Subject, as: 'subject' }]
+        });
+
+        const formatted = marks.map(m => ({
+            id: m.id,
+            cieType: m.cieType,
+            marks: m.marks,
+            maxMarks: m.maxMarks,
+            subjectName: m.subject.name,
+            subjectCode: m.subject.code,
+            semester: m.subject.semester,
+            attendance: m.attendance
+        }));
+
+        res.json(formatted);
+    } catch (error) {
+        console.error('Get student marks error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
 // Get marks for a subject (faculty/HOD)
 router.get('/subject/:subjectId', authMiddleware, roleMiddleware('FACULTY', 'HOD'), async (req, res) => {
     try {
@@ -107,7 +134,7 @@ router.post('/update', authMiddleware, roleMiddleware('FACULTY'), async (req, re
 });
 
 // Batch Update Marks
-router.post('/update/batch', authMiddleware, roleMiddleware('FACULTY'), async (req, res) => {
+router.post('/update/batch', authMiddleware, roleMiddleware('FACULTY', 'HOD'), async (req, res) => {
     try {
         const payload = req.body; // Expect array of { studentId, subjectId, iaType, co1, co2 }
 
@@ -132,8 +159,12 @@ router.post('/update/batch', authMiddleware, roleMiddleware('FACULTY'), async (r
 
             if (markRecord) {
                 // Determine if we are allowed to update (Lock check)
-                if (markRecord.status === 'SUBMITTED' || markRecord.status === 'APPROVED') {
-                    continue; // Skip locked records
+                // HOD can override locks (edit APPROVED/SUBMITTED marks)
+                const isLocked = (markRecord.status === 'SUBMITTED' || markRecord.status === 'APPROVED');
+                const canOverride = req.user.role === 'HOD' || req.user.role === 'PRINCIPAL';
+
+                if (isLocked && !canOverride) {
+                    continue; // Skip locked records if not HOD
                 }
 
                 await markRecord.update({
@@ -257,6 +288,53 @@ router.post('/reject', authMiddleware, roleMiddleware('HOD'), async (req, res) =
         res.json({ message: 'Marks rejected successfully', count: updatedRows });
     } catch (error) {
         console.error('Reject marks error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+// Unlock marks (HOD) - Change APPROVED back to PENDING
+router.post('/unlock', authMiddleware, roleMiddleware('HOD'), async (req, res) => {
+    try {
+        const { subjectId, iaType, reason } = req.body;
+
+        if (!subjectId || !iaType) {
+            return res.status(400).json({ message: 'Subject ID and IA Type required' });
+        }
+
+        // Find all approved marks for this subject and CIE type
+        const [updatedRows] = await CIEMark.update(
+            {
+                status: 'PENDING'
+                // TODO: Add unlocked_by, unlocked_at, unlock_reason fields when schema is updated
+            },
+            {
+                where: {
+                    subjectId: subjectId,
+                    cieType: iaType,
+                    status: 'APPROVED'
+                }
+            }
+        );
+
+        if (updatedRows === 0) {
+            return res.status(404).json({
+                message: 'No approved marks found to unlock. Marks may already be pending or not exist.'
+            });
+        }
+
+        // Get subject info for response
+        const subject = await Subject.findByPk(subjectId);
+        const subjectName = subject ? subject.name : 'Unknown Subject';
+
+        res.json({
+            message: `${updatedRows} marks for ${subjectName} ${iaType} unlocked successfully. Faculty can now edit them.`,
+            count: updatedRows,
+            subjectName,
+            iaType,
+            reason: reason || null
+        });
+    } catch (error) {
+        console.error('Unlock marks error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });

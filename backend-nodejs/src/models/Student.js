@@ -31,6 +31,10 @@ const Student = sequelize.define('Student', {
         type: DataTypes.STRING,
         field: 'phone_no'
     },
+    parentPhone: {
+        type: DataTypes.STRING,
+        field: 'parent_phone'
+    },
     email: {
         type: DataTypes.STRING
     },

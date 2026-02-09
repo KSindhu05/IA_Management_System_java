@@ -1,0 +1,16 @@
+Connection has been established successfully.
+--- First 5 Students ---
+ID: 1, Name: A KAVITHA, Dept: 'CS', Sem: '2'
+ID: 2, Name: ABHISHEKA, Dept: 'CS', Sem: '2'
+ID: 3, Name: ADARSH REDDY G, Dept: 'CS', Sem: '2'
+ID: 4, Name: AGASARA KEERTHANA, Dept: 'CS', Sem: '2'
+ID: 5, Name: AKHIL S, Dept: 'CS', Sem: '2'
+
+--- First 5 Subjects ---
+ID: 5, Name: Engineering Maths-II, Dept: 'CS', Sem: '2', InstructorId: 'M'
+ID: 6, Name: English Communication, Dept: 'CS', Sem: '2', InstructorId: 'N'
+ID: 7, Name: CAEG, Dept: 'CS', Sem: '2', InstructorId: 'R'
+ID: 8, Name: Python, Dept: 'CS', Sem: '2', InstructorId: 'W'
+ID: 9, Name: Indian Constitution, Dept: 'CS', Sem: '2', InstructorId: 'W'
+
+Total Students: 63

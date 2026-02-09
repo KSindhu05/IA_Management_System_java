@@ -28,4 +28,18 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
+// Get subject by ID
+router.get('/:id', authMiddleware, async (req, res) => {
+    try {
+        const subject = await Subject.findByPk(req.params.id);
+        if (!subject) {
+            return res.status(404).json({ message: 'Subject not found' });
+        }
+        res.json(subject);
+    } catch (error) {
+        console.error('Get subject by ID error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 module.exports = router;

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import API_BASE_URL from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Edit, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell } from 'lucide-react';
 import { facultyData, facultyProfiles, facultySubjects, studentsList, labSchedule, getMenteesForFaculty } from '../utils/mockData';
 import styles from './FacultyDashboard.module.css';
 
@@ -38,11 +38,10 @@ const FacultyDashboard = () => {
     const currentFaculty = facultyProfiles.find(f => f.id === user?.id) || facultyData;
 
     // Filter Subjects for this Faculty
-    // Filter Subjects for this Faculty
     const mySubjects = subjects.length > 0
         ? subjects.map(s => ({
             ...s,
-            studentCount: students.filter(st => st.semester === s.semester).length || 0
+            studentCount: students.filter(st => String(st.semester) === String(s.semester) && st.department === s.department).length || 0
         }))
         : facultySubjects.filter(sub => sub.instructorId === currentFaculty.id);
 
@@ -61,22 +60,22 @@ const FacultyDashboard = () => {
 
             // Fetch Students
             try {
-                const sRes = await fetch(`${API_BASE}/students`, { headers });
+                const sRes = await fetch(`${API_BASE_URL}/student/all`, { headers });
                 console.log("Students API status:", sRes.status);
                 if (sRes.ok) {
                     const data = await sRes.json();
-                    console.log("Students fetched:", data.length);
+                    console.log("Fetched Students:", data.length, data[0]); // Log first student to check structure
                     setStudents(data);
                 } else {
-                    console.error("Students fetch failed:", await sRes.text());
+                    console.error("Failed to fetch students");
                 }
             } catch (e) {
-                console.error("Failed to fetch students", e);
+                console.error("Error fetching students:", e);
             }
 
             // Fetch Subjects (By Faculty Assignment)
             try {
-                const subRes = await fetch(`${API_BASE}/faculty/my-subjects`, { headers });
+                const subRes = await fetch(`${API_BASE_URL}/faculty/my-subjects`, { headers });
                 console.log("Subjects API status:", subRes.status);
                 if (subRes.ok) {
                     const data = await subRes.json();
@@ -91,7 +90,7 @@ const FacultyDashboard = () => {
 
             // Fetch Analytics
             try {
-                const anRes = await fetch(`${API_BASE}/faculty/analytics`, { headers });
+                const anRes = await fetch(`${API_BASE_URL}/faculty/analytics`, { headers });
                 if (anRes.ok) {
                     const data = await anRes.json();
                     setFacultyClassAnalytics(data);
@@ -501,7 +500,7 @@ const FacultyDashboard = () => {
         try {
             const token = user?.token;
             const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-            const res = await fetch(`${API_BASE}/subject/${subject.id}`, { headers });
+            const res = await fetch(`${API_BASE_URL}/marks/subject/${subject.id}`, { headers });
 
             if (res.ok) {
                 const data = await res.json();
@@ -673,7 +672,7 @@ const FacultyDashboard = () => {
                 return;
             }
 
-            const response = await fetch(`${API_BASE}/update/batch`, {
+            const response = await fetch(`${API_BASE_URL}/marks/update/batch`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(payload)
@@ -709,7 +708,7 @@ const FacultyDashboard = () => {
 
             // Call Submit Endpoint
             // Node.js backend expects query params: ?subjectId=...&cieType=...
-            const res = await fetch(`${API_BASE}/submit?subjectId=${selectedSubject.id}&cieType=${cieType.toUpperCase()}`, {
+            const res = await fetch(`${API_BASE_URL}/marks/submit?subjectId=${selectedSubject.id}&cieType=${cieType.toUpperCase()}`, {
                 method: 'POST',
                 headers
             });
@@ -733,6 +732,28 @@ const FacultyDashboard = () => {
         setIsLocked(false);
         showToast('Editing Enabled', 'info');
     };
+
+    const handleEditRequest = () => {
+        if (!selectedSubject) {
+            alert('Please select a subject first');
+            return;
+        }
+
+        const reason = prompt(`Why do you need to edit the approved marks for ${selectedSubject.name}?\n\n(This request will be sent to HOD for approval)`);
+
+        if (reason === null) return; // User clicked Cancel
+
+        if (!reason || reason.trim() === '') {
+            alert('Please provide a reason for your edit request');
+            return;
+        }
+
+        // For now, just show a success message
+        // TODO: Implement backend endpoint to notify HOD
+        alert(`Edit request sent to HOD!\n\nSubject: ${selectedSubject.name}\nReason: ${reason}\n\nThe HOD will review your request and unlock the marks if approved.`);
+        showToast('Edit request sent to HOD', 'success');
+    };
+
 
 
 
@@ -916,11 +937,11 @@ const FacultyDashboard = () => {
                 <div className={styles.analyticsCard}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                         <h3 className={styles.analyticsTitle}>CIE (IA) STATUS</h3>
-                        <span style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 'bold' }}>Deadline: Nov 10, 2025</span>
+                        <span style={{ fontSize: '0.8rem', color: '#dc2626', fontWeight: 'bold' }}>{facultyClassAnalytics.start || 'Deadline: TBA'}</span>
                     </div>
                     <div className={styles.analyticsContent}>
                         <div className={styles.statItem}>
-                            <span className={styles.statValue}>{facultyClassAnalytics.evaluated + facultyClassAnalytics.pending}</span>
+                            <span className={styles.statValue}>{facultyClassAnalytics.totalStudents || (facultyClassAnalytics.evaluated + facultyClassAnalytics.pending)}</span>
                             <span className={styles.statLabel}><Users size={14} /> Total Students</span>
                         </div>
                         <div className={styles.statItem}>
@@ -987,6 +1008,8 @@ const FacultyDashboard = () => {
                     </div>
                 )
             }
+
+
 
             < div className={styles.mainContentGrid} >
                 <div className={styles.leftColumn}>
@@ -1399,9 +1422,19 @@ const FacultyDashboard = () => {
                                     </button>
                                 </>
                             ) : (
-                                <button className={styles.secondaryBtn} disabled style={{ cursor: 'not-allowed', color: '#6b7280', borderColor: '#d1d5db' }}>
-                                    <Lock size={16} /> Marks Locked
-                                </button>
+                                <>
+                                    <button className={styles.secondaryBtn} disabled style={{ cursor: 'not-allowed', color: '#6b7280', borderColor: '#d1d5db' }}>
+                                        <Lock size={16} /> Marks Locked
+                                    </button>
+                                    <button
+                                        className={styles.saveBtn}
+                                        onClick={handleEditRequest}
+                                        style={{ backgroundColor: '#f59e0b', color: 'white' }}
+                                        title="Request permission from HOD to edit these marks"
+                                    >
+                                        <Edit size={16} /> Request Edit
+                                    </button>
+                                </>
                             )}
 
                             <button className={`${styles.saveBtn}`} onClick={downloadCSV} style={{ backgroundColor: '#4b5563' }}>
@@ -1428,73 +1461,75 @@ const FacultyDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {students.map((student, index) => {
-                                    const sMarks = marks[student.id] || {};
-                                    // Mapping logic: local edits override API data
-                                    const ia1Mark = sMarks['CIE1'] || {};
+                                {students
+                                    .filter(s => selectedSubject && s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester))
+                                    .map((student, index) => {
+                                        const sMarks = marks[student.id] || {};
+                                        // Mapping logic: local edits override API data
+                                        const ia1Mark = sMarks['CIE1'] || {};
 
-                                    // Check if we have a direct edit (top-level key) or fallback to API object
-                                    const valCIE1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '');
-                                    const valCIE2 = sMarks.cie2 !== undefined ? sMarks.cie2 : (ia1Mark.cie2Score != null ? ia1Mark.cie2Score : '');
-                                    const valCIE3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '';
-                                    const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
-                                    const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
+                                        // Check if we have a direct edit (top-level key) or fallback to API object
+                                        const valCIE1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '');
+                                        const valCIE2 = sMarks.cie2 !== undefined ? sMarks.cie2 : (ia1Mark.cie2Score != null ? ia1Mark.cie2Score : '');
+                                        const valCIE3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '';
+                                        const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
+                                        const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
 
-                                    return (
-                                        <tr key={student.id}>
-                                            <td>{index + 1}</td>
-                                            <td>{student.rollNo || student.regNo}</td>
-                                            <td>{student.name}</td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    className={styles.markInput}
-                                                    value={valCIE1}
-                                                    onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
-                                                    disabled={isLocked}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    className={styles.markInput}
-                                                    value={valCIE2}
-                                                    onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
-                                                    disabled={isLocked}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    className={styles.markInput}
-                                                    value={valCIE3}
-                                                    onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
-                                                    disabled={isLocked}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    className={styles.markInput}
-                                                    value={valCIE4}
-                                                    onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
-                                                    disabled={isLocked}
-                                                />
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    className={styles.markInput}
-                                                    value={valCIE5}
-                                                    onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
-                                                    disabled={isLocked}
-                                                />
-                                            </td>
-                                            {/* Final Total */}
-                                            <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
-                                        </tr>
-                                    )
-                                })}
+                                        return (
+                                            <tr key={student.id}>
+                                                <td>{index + 1}</td>
+                                                <td>{student.rollNo || student.regNo}</td>
+                                                <td>{student.name}</td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.markInput}
+                                                        value={valCIE1}
+                                                        onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
+                                                        disabled={isLocked}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.markInput}
+                                                        value={valCIE2}
+                                                        onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
+                                                        disabled={isLocked}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.markInput}
+                                                        value={valCIE3}
+                                                        onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
+                                                        disabled={isLocked}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.markInput}
+                                                        value={valCIE4}
+                                                        onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
+                                                        disabled={isLocked}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.markInput}
+                                                        value={valCIE5}
+                                                        onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
+                                                        disabled={isLocked}
+                                                    />
+                                                </td>
+                                                {/* Final Total */}
+                                                <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
+                                            </tr>
+                                        )
+                                    })}
                             </tbody>
                         </table>
                     </div>
