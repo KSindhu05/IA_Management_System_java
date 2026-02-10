@@ -12,11 +12,17 @@ const { Op } = require('sequelize');
 // Assuming valid student for now.
 router.get('/student/announcements', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
     try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         // Todo: Filter by student's subjects. For now, fetch all active announcements.
         // In a real app, we'd query Enrollment table.
         const announcements = await Announcement.findAll({
             where: {
-                status: 'SCHEDULED'
+                status: 'SCHEDULED',
+                scheduledDate: {
+                    [Op.gte]: today // Only show pending or future exams
+                }
             },
             include: [
                 { model: Subject, attributes: ['name', 'code'] },

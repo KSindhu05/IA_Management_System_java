@@ -48,11 +48,13 @@ router.get('/department/:dept/stats', authMiddleware, async (req, res) => {
 
         const average = (totalMarks / marks.length).toFixed(1);
         const passPercentage = ((passedCount / marks.length) * 100).toFixed(1);
+        const atRiskPercentage = ((atRiskCount / marks.length) * 100).toFixed(1);
 
         res.json({
             average: parseFloat(average),
             passPercentage: parseFloat(passPercentage),
-            atRiskCount
+            atRiskCount,
+            atRiskPercentage: parseFloat(atRiskPercentage)
         });
 
     } catch (error) {
