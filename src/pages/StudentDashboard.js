@@ -138,7 +138,7 @@ const StudentDashboard = () => {
                 const notifRes = await fetch(`${API_BASE_URL}/cie/student/notifications`, { headers: { 'Authorization': `Bearer ${user.token}` } });
                 if (notifRes.ok) {
                     const notifs = await notifRes.json();
-                    const filteredNotifs = notifs.filter(n => !n.message.includes("Welcome to the IA Management System"));
+                    const filteredNotifs = notifs.filter(n => !n.message.includes("Welcome to the IA Management System") && n.type !== 'EXAM_SCHEDULE');
                     setNotifications(filteredNotifs.map(n => ({
                         id: n.id,
                         message: n.message,
@@ -400,7 +400,7 @@ const StudentDashboard = () => {
                                                 {selectedCIE === 'CIE-4' && <td>{item.cie4 !== '-' ? `${item.cie4} / 50` : '-'}</td>}
                                                 {selectedCIE === 'CIE-5' && <td>{item.cie5 !== '-' ? `${item.cie5} / 50` : '-'}</td>}
 
-                                                <td style={{ fontWeight: 'bold' }}>{item.total}</td>
+                                                <td style={{ fontWeight: 'bold' }}>{item.total} / {selectedCIE === 'All' ? 250 : 50}</td>
                                                 <td><span className={styles.badge} style={{ background: status.bg, color: status.color, border: `1px solid ${status.color}30` }}>{status.label}</span></td>
                                             </tr>
                                         );
@@ -495,6 +495,34 @@ const StudentDashboard = () => {
                             <Clock size={16} className={styles.examIcon} />
                         </div>
                     )) : <p style={{ color: '#6b7280', padding: '1rem' }}>No upcoming exams scheduled.</p>}
+                </div>
+            </div>
+
+            {/* General Notifications Section */}
+            <div className={styles.card} style={{ animationDelay: '0.1s' }}>
+                <h2 className={styles.cardTitle}>🔔 General Notifications</h2>
+                <div className={styles.notificationsList} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                    {notifications.length > 0 ? notifications.map((notif, idx) => (
+                        <div key={notif.id} className={styles.notifItem} style={{
+                            padding: '1rem',
+                            borderRadius: '8px',
+                            background: notif.type === 'alert' ? '#fef2f2' : '#f0f9ff',
+                            border: `1px solid ${notif.type === 'alert' ? '#fecaca' : '#bae6fd'}`,
+                            display: 'flex',
+                            gap: '1rem',
+                            animation: `slideUp 0.3s ease-out ${idx * 0.1}s backwards`
+                        }}>
+                            <div style={{ color: notif.type === 'alert' ? '#dc2626' : '#0284c7' }}>
+                                {notif.type === 'alert' ? <AlertCircle size={24} /> : <Bell size={24} />}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <p style={{ margin: '0 0 0.5rem 0', color: '#334155', lineHeight: '1.5' }}>{notif.message}</p>
+                                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{notif.time}</span>
+                            </div>
+                        </div>
+                    )) : (
+                        <p style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>No new notifications.</p>
+                    )}
                 </div>
             </div>
         </div>

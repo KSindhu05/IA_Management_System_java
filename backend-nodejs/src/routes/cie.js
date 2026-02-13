@@ -154,8 +154,8 @@ router.get('/student/notifications', authMiddleware, roleMiddleware('STUDENT'), 
         const generalNotifications = await Notification.findAll({
             where: {
                 [Op.or]: [
-                    { userId: student.id }, // Personal
-                    { category: 'BROADCAST' } // Global/Department Broadcasts (Refine logic if needed)
+                    { userId: req.user.id }, // Corrected: Use User.id (from token) as Notifications are linked to User table
+                    { category: 'BROADCAST' } // Global/Department Broadcasts
                 ]
             },
             order: [['createdAt', 'DESC']],

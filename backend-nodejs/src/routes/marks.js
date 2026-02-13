@@ -168,7 +168,7 @@ router.post('/update/batch', authMiddleware, roleMiddleware('FACULTY', 'HOD'), a
                 }
 
                 await markRecord.update({
-                    marks: co1 || 0,
+                    marks: (co1 === '' || co1 === null) ? null : co1,
                     status: 'PENDING' // Reset to PENDING on edit
                 });
                 updates.push(markRecord.id);
@@ -177,7 +177,7 @@ router.post('/update/batch', authMiddleware, roleMiddleware('FACULTY', 'HOD'), a
                 const newMark = await CIEMark.create({
                     studentId,
                     subjectId,
-                    marks: co1 || 0,
+                    marks: (co1 === '' || co1 === null) ? null : co1,
                     maxMarks: 50,
                     attendance: 0,
                     status: 'PENDING',

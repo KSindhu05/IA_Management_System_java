@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, roleMiddleware } = require('../middleware/auth');
-const { Notification } = require('../models');
+const { Notification, User } = require('../models');
 
 // Get user notifications
 router.get('/', authMiddleware, async (req, res) => {
@@ -102,6 +102,57 @@ router.get('/unread/count', authMiddleware, async (req, res) => {
         res.json({ count });
     } catch (error) {
         console.error('Unread count error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+// Broadcast notification
+router.post('/broadcast', authMiddleware, roleMiddleware('HOD', 'PRINCIPAL', 'ADMIN'), async (req, res) => {
+    try {
+        const { recipientType, message, department, category } = req.body;
+        // senderId is available via req.user.id
+
+        if (!recipientType || !message) {
+            return res.status(400).json({ message: 'Missing recipientType or message' });
+        }
+
+        let whereClause = {};
+
+        // Filter by role
+        if (recipientType === 'FACULTY') {
+            whereClause.role = 'FACULTY';
+        } else if (recipientType === 'STUDENT') {
+            whereClause.role = 'STUDENT';
+        } else if (recipientType === 'PRINCIPAL') {
+            whereClause.role = 'PRINCIPAL';
+        } else if (recipientType === 'BOTH') {
+            whereClause.role = ['FACULTY', 'STUDENT'];
+        }
+
+        // Filter by department if provided (and not Principal who might send to all)
+        // If recipientType is PRINCIPAL, usually we don't filter by department unless specified
+        if (department && department !== 'All' && recipientType !== 'PRINCIPAL') {
+            whereClause.department = department;
+        }
+
+        const users = await User.findAll({ where: whereClause, attributes: ['id'] });
+
+        if (users.length === 0) {
+            return res.json({ message: 'No recipients found', count: 0 });
+        }
+
+        const notifications = users.map(user => ({
+            userId: user.id,
+            message,
+            type: 'INFO',
+            category: category || 'ANNOUNCEMENT',
+            isRead: false
+        }));
+
+        await Notification.bulkCreate(notifications);
+
+        res.json({ message: `Notification sent to ${users.length} users`, count: users.length });
+    } catch (error) {
+        console.error('Broadcast error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
