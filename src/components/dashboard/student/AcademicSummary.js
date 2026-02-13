@@ -21,20 +21,6 @@ const AcademicSummary = ({ studentInfo, riskLevel }) => {
                 </div>
             </div>
 
-            {/* Attendance Card */}
-            <div className={styles.summaryCard}>
-                <div className={styles.summaryIcon} style={{ background: 'rgba(22, 163, 74, 0.1)', color: 'var(--success)' }}>
-                    <ClockIcon />
-                </div>
-                <div className={styles.summaryInfo}>
-                    <span className={styles.summaryLabel}>Attendance</span>
-                    <h3 className={styles.summaryValue}>{studentInfo.attendance}%</h3>
-                    <span className={styles.summarySubtext} style={{ color: studentInfo.attendance < 75 ? 'var(--danger)' : 'var(--success)' }}>
-                        {studentInfo.attendance < 75 ? 'Action Needed' : 'Good Standing'}
-                    </span>
-                </div>
-            </div>
-
             {/* Avg CIE Score */}
             <div className={styles.summaryCard}>
                 <div className={styles.summaryIcon} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)' }}>
@@ -55,7 +41,7 @@ const AcademicSummary = ({ studentInfo, riskLevel }) => {
                 <div className={styles.summaryInfo}>
                     <span className={styles.summaryLabel}>Academic Status</span>
                     <h3 className={styles.summaryValue} style={{ color: riskColor }}>{riskLabel} Risk</h3>
-                    <span className={styles.summarySubtext}>Based on Marks & Att.</span>
+                    <span className={styles.summarySubtext}>Based on Marks</span>
                 </div>
             </div>
         </div>

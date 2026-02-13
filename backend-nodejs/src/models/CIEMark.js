@@ -49,10 +49,4 @@ const CIEMark = sequelize.define('CIEMark', {
     timestamps: false
 });
 
-// Relationships
-CIEMark.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
-CIEMark.belongsTo(Subject, { foreignKey: 'subjectId', as: 'subject' });
-Student.hasMany(CIEMark, { foreignKey: 'studentId', as: 'marks' });
-Subject.hasMany(CIEMark, { foreignKey: 'subjectId', as: 'marks' });
-
 module.exports = CIEMark;

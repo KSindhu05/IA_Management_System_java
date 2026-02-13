@@ -193,7 +193,7 @@ router.get('/resources', authMiddleware, roleMiddleware('STUDENT'), async (req, 
     }
 });
 
-// Get Student's Faculty
+// Get Student's Faculty (All faculty in department)
 router.get('/faculty', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
     try {
         const student = await Student.findOne({
@@ -204,45 +204,42 @@ router.get('/faculty', authMiddleware, roleMiddleware('STUDENT'), async (req, re
             return res.status(404).json({ message: 'Student not found' });
         }
 
-        // Find subjects for this student
-        const subjects = await Subject.findAll({
-            where: {
-                department: student.department,
-                semester: student.semester
-            }
-        });
-
-        // Get instructor IDs
-        const instructorIds = subjects
-            .filter(s => s.instructorId)
-            .map(s => s.instructorId);
-
-        if (instructorIds.length === 0) {
-            return res.json([]);
-        }
-
-        // Find faculty users
+        // Find all faculty users in the student's department
         const faculty = await User.findAll({
             where: {
-                id: { [Op.in]: instructorIds },
-                role: 'FACULTY'
+                role: 'FACULTY',
+                department: student.department
             },
             attributes: ['id', 'fullName', 'email', 'department']
         });
 
-        // Map faculty to subjects
+        if (faculty.length === 0) {
+            return res.json([]);
+        }
+
+        // Get all subjects in the department to map them to instructors
+        const subjects = await Subject.findAll({
+            where: {
+                department: student.department
+            },
+            attributes: ['name', 'instructorId']
+        });
+
+        // Map faculty to current subjects they teach (in this department)
         const facultyDetails = faculty.map(f => {
             const teaches = subjects
-                .filter(s => s.instructorId == f.id)
-                .map(s => s.name)
-                .join(', ');
+                .filter(s => String(s.instructorId) === String(f.id))
+                .map(s => s.name);
+
+            // Remove duplicates and join
+            const uniqueSubjects = [...new Set(teaches)].join(', ');
 
             return {
                 id: f.id,
-                name: f.fullName || 'Unknown Faculty',
+                name: f.fullName || f.username,
                 email: f.email,
                 department: f.department,
-                subjects: teaches
+                subjects: uniqueSubjects || 'No active subjects assigned'
             };
         });
 

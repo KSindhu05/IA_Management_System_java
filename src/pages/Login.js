@@ -32,7 +32,7 @@ const Login = () => {
     const typeWriterStrings = [
         "IA Management System for Diploma Education",
         "Track Internal Assessment Marks",
-        "Monitor Attendance & Academic Performance",
+        "Monitor Academic Performance",
         "Role-Based Access for Students and Faculty"
     ];
 

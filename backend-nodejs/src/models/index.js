@@ -26,6 +26,11 @@ Resource.belongsTo(Subject, { foreignKey: 'subjectId' });
 Resource.belongsTo(User, { as: 'uploader', foreignKey: 'uploadedBy' });
 Subject.hasMany(Resource, { foreignKey: 'subjectId' });
 
+CIEMark.belongsTo(Student, { foreignKey: 'studentId', as: 'student' });
+CIEMark.belongsTo(Subject, { foreignKey: 'subjectId', as: 'subject' });
+Student.hasMany(CIEMark, { foreignKey: 'studentId', as: 'marks' });
+Subject.hasMany(CIEMark, { foreignKey: 'subjectId', as: 'marks' });
+
 module.exports = {
     User,
     Student,

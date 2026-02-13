@@ -6,6 +6,17 @@ import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, C
 import { facultyData, facultyProfiles, facultySubjects, studentsList, labSchedule, getMenteesForFaculty } from '../utils/mockData';
 import styles from './FacultyDashboard.module.css';
 
+
+
+const calculateGradeFromPercentage = (percentage) => {
+    if (percentage >= 90) return 'S';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    if (percentage >= 50) return 'D';
+    return 'F';
+};
+
 const FacultyDashboard = () => {
     const { user } = useAuth();
     const [activeSection, setActiveSection] = useState('Overview');
@@ -19,7 +30,6 @@ const FacultyDashboard = () => {
     // Notification State
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [myAnnouncements, setMyAnnouncements] = useState([]);
     const [publishedSchedules, setPublishedSchedules] = useState([]); // CIE schedules published by HOD
 
     // API State
@@ -36,6 +46,37 @@ const FacultyDashboard = () => {
         lowPerformersList: []
     });
 
+    // Mentorship State
+    const [menteeIds, setMenteeIds] = useState(() => {
+        const saved = localStorage.getItem(`mentees_${user?.id}`);
+        if (saved) return JSON.parse(saved);
+
+        // Default IDs from the image (459CS25001 - 459CS25007 precisely)
+        const defaultRegs = ['459CS25001', '459CS25002', '459CS25003', '459CS25005', '459CS25007'];
+        const foundIds = students
+            .filter(s => defaultRegs.includes(s.regNo) || defaultRegs.includes(s.rollNo))
+            .map(s => s.id);
+
+        return foundIds.length > 0 ? foundIds : [];
+    });
+    const [showMenteeModal, setShowMenteeModal] = useState(false);
+    const [menteeSearchTerm, setMenteeSearchTerm] = useState('');
+    const [manualMentees, setManualMentees] = useState(() => {
+        const saved = localStorage.getItem(`manual_mentees_${user?.id}`);
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [newStudentForm, setNewStudentForm] = useState({
+        regNo: '',
+        name: '',
+        parentPhone: '',
+        avgMark: ''
+    });
+    const [modalTab, setModalTab] = useState('select'); // 'select' or 'manual'
+
+    // -- Edit Student State --
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+
     // Verify Faculty
     const currentFaculty = facultyProfiles.find(f => f.id === user?.id) || facultyData;
 
@@ -47,28 +88,87 @@ const FacultyDashboard = () => {
         }))
         : facultySubjects.filter(sub => sub.instructorId === currentFaculty.id);
 
-    // Filter Mentees
-    // Filter Mentees (Mock: Assign first 5 students as mentees)
-    // Filter Mentees (Mock: Assign first 5 students as mentees)
-    // Update: Calculate real attendance for mentees similar to profile modal
-    const myMentees = students.length > 0 ? students.slice(0, 5).map(s => {
-        let realAttendance = s.attendance || 0;
-        if (allStudentMarks) {
-            Object.keys(allStudentMarks).forEach(subId => {
-                const sMarks = allStudentMarks[subId][s.id];
-                // Check if attendance exists and is greater
-                if (sMarks && sMarks.attendance !== undefined && sMarks.attendance !== null) {
-                    // If s.attendance was 0 (default), this will take the real value
-                    // Or if we want max across subjects
-                    realAttendance = Math.max(realAttendance, Number(sMarks.attendance));
-                }
-            });
-        }
-        return { ...s, attendance: realAttendance };
-    }) : [];
+    // Derived Mentees
+    const myMentees = students.filter(s => menteeIds.includes(s.id)).map(s => {
+        return { ...s };
+    });
 
-    // Filter Defaulters (Attendance < 75%)
-    const attendanceDefaulters = studentsList.filter(s => s.attendance < 75);
+    const handleAddMentee = (studentId) => {
+        if (menteeIds.includes(studentId)) {
+            showToast('Student already in mentorship list', 'warning');
+            return;
+        }
+        const newIds = [...menteeIds, studentId];
+        setMenteeIds(newIds);
+        localStorage.setItem(`mentees_${user?.id}`, JSON.stringify(newIds));
+        showToast('Mentee added successfully');
+        setShowMenteeModal(false);
+    };
+
+    const handleAddManualStudent = (e) => {
+        e.preventDefault();
+        const newStudent = {
+            id: `manual_${Date.now()}`,
+            ...newStudentForm,
+            isManual: true
+        };
+        const newList = [...manualMentees, newStudent];
+        setManualMentees(newList);
+        localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        setNewStudentForm({ regNo: '', name: '', parentPhone: '', avgMark: '' });
+        setShowMenteeModal(false);
+        showToast('Student added successfully');
+    };
+
+    const handleRemoveMentee = (studentId) => {
+        if (typeof studentId === 'string' && studentId.startsWith('manual_')) {
+            const newList = manualMentees.filter(m => m.id !== studentId);
+            setManualMentees(newList);
+            localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        } else {
+            const newIds = menteeIds.filter(id => id !== studentId);
+            setMenteeIds(newIds);
+            localStorage.setItem(`mentees_${user?.id}`, JSON.stringify(newIds));
+        }
+        showToast('Mentee removed', 'info');
+    };
+
+    const handleEditStudent = (student) => {
+        setEditingStudent({ ...student });
+        setShowEditModal(true);
+    };
+
+    const handleUpdateStudent = (e) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+
+        // Update in Manual List
+        if (editingStudent.isManual) {
+            const newList = manualMentees.map(m => m.id === editingStudent.id ? editingStudent : m);
+            setManualMentees(newList);
+            localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        } else {
+            // Update in Real List (Local State)
+            const newStudents = students.map(s => s.id === editingStudent.id ? { ...s, ...editingStudent } : s);
+            setStudents(newStudents);
+
+            // --- GLOBAL SYNC: Save to localStorage for other dashboards ---
+            const globalUpdates = JSON.parse(localStorage.getItem('global_student_updates') || '{}');
+            globalUpdates[editingStudent.id] = {
+                name: editingStudent.name,
+                regNo: editingStudent.regNo,
+                parentPhone: editingStudent.parentPhone,
+                // Add other fields if needed
+            };
+            localStorage.setItem('global_student_updates', JSON.stringify(globalUpdates));
+        }
+
+        showToast('Student details updated');
+        setShowEditModal(false);
+        setEditingStudent(null);
+    };
+
+
 
     // Fetch Analytics helper
     const fetchAnalytics = React.useCallback(async () => {
@@ -144,16 +244,7 @@ const FacultyDashboard = () => {
                 console.error("Failed to fetch notifications", e);
             }
 
-            // Fetch My Announcements
-            try {
-                const annRes = await fetch(`${API_BASE_URL}/api/cie/faculty/announcements/list`, { headers });
-                if (annRes.ok) {
-                    const anns = await annRes.json();
-                    setMyAnnouncements(anns);
-                }
-            } catch (e) {
-                console.error("Failed to fetch announcements", e);
-            }
+
 
             // Fetch Published CIE Schedules (from HOD)
             try {
@@ -196,7 +287,15 @@ const FacultyDashboard = () => {
                                 // Transform to { studentId: marks }
                                 const subMarks = {};
                                 mData.forEach(m => {
-                                    subMarks[m.studentId] = m;
+                                    if (!subMarks[m.studentId]) {
+                                        subMarks[m.studentId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
+                                    }
+                                    const key = m.cieType ? m.cieType.toLowerCase() : (m.iaType ? m.iaType.toLowerCase() : null);
+                                    if (key) {
+                                        subMarks[m.studentId][key] = m.totalScore || '';
+                                        // Also store status if needed? The table logic doesn't use status per se, just scores.
+                                        // But wait, the helper `getStudentPerformance` uses `sMarks.cie1` etc.
+                                    }
                                 });
                                 marksMap[sub.id] = subMarks;
                             }
@@ -215,6 +314,36 @@ const FacultyDashboard = () => {
 
     }, [user, fetchAnalytics]);
 
+    // Helper to get real performance data for a student
+    const getStudentPerformance = (studentId) => {
+        let totalPerformance = 0;
+        let subjectCount = 0;
+        let hasData = false;
+
+        Object.keys(allStudentMarks).forEach(subId => {
+            const sMarks = allStudentMarks[subId][studentId];
+            if (sMarks) {
+                hasData = true;
+                const scores = [sMarks.cie1, sMarks.cie2, sMarks.cie3, sMarks.cie4, sMarks.cie5]
+                    .filter(x => x !== '' && x !== 'Ab' && x !== undefined && x !== null)
+                    .map(Number);
+
+                if (scores.length > 0) {
+                    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+                    // Normalized to 100 (assuming CIE max is 50)
+                    const percent = (avg / 50) * 100;
+                    totalPerformance += percent;
+                    subjectCount++;
+                }
+            }
+        });
+
+        const finalPercentage = subjectCount > 0 ? (totalPerformance / subjectCount) : 0;
+        const grade = hasData ? calculateGradeFromPercentage(finalPercentage) : 'N/A';
+
+        return { grade, hasData, percentage: finalPercentage };
+    };
+
     // -- Enhancement State --
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState(null);
@@ -226,88 +355,7 @@ const FacultyDashboard = () => {
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [selectedGradeFilter, setSelectedGradeFilter] = useState('All');
 
-    // -- Attendance State --
-    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-    const [attendanceData, setAttendanceData] = useState({}); // { subjectId-date: { studentId: 'Present'/'Absent' } }
-    const [savedAttendance, setSavedAttendance] = useState(false);
 
-    const handleAttendanceChange = (studentId, status) => {
-        if (!selectedSubject) return;
-        const key = `${selectedSubject.id}-${attendanceDate}`;
-        setAttendanceData(prev => ({
-            ...prev,
-            [key]: {
-                ...prev[key],
-                [studentId]: status
-            }
-        }));
-        setSavedAttendance(false);
-    };
-
-    const saveAttendance = async () => {
-        if (!selectedSubject) return;
-        setSaving(true);
-        try {
-            const classStudents = students.filter(s => s.semester === selectedSubject.semester);
-            const key = `${selectedSubject.id}-${attendanceDate}`;
-            const currentData = attendanceData[key] || {};
-
-            const records = classStudents.map(s => ({
-                studentId: s.id,
-                status: (currentData[s.id] || 'Present').toUpperCase()
-            }));
-
-            const token = user?.token;
-            const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
-
-            const res = await fetch(`${API_BASE_URL}/attendance/update`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    subjectId: selectedSubject.id,
-                    date: attendanceDate,
-                    records
-                })
-            });
-
-            if (res.ok) {
-                setSavedAttendance(true);
-                showToast('Attendance Saved Successfully!', 'success');
-            } else {
-                const txt = await res.text();
-                showToast('Failed: ' + txt, 'error');
-            }
-        } catch (e) {
-            console.error(e);
-            showToast('Error saving attendance', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // Fetch Attendance
-    React.useEffect(() => {
-        if (activeSection === 'Attendance' && selectedSubject && attendanceDate) {
-            const fetchAtt = async () => {
-                try {
-                    const token = user?.token;
-                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                    const res = await fetch(`${API_BASE_URL}/attendance?subjectId=${selectedSubject.id}&date=${attendanceDate}`, { headers });
-                    if (res.ok) {
-                        const data = await res.json();
-                        // data is list { studentId, status }
-                        const map = {};
-                        data.forEach(r => { map[r.studentId] = r.status === 'PRESENT' ? 'Present' : 'Absent'; });
-
-                        const key = `${selectedSubject.id}-${attendanceDate}`;
-                        setAttendanceData(prev => ({ ...prev, [key]: map }));
-                        setSavedAttendance(true);
-                    }
-                } catch (e) { console.error(e); }
-            };
-            fetchAtt();
-        }
-    }, [activeSection, selectedSubject, attendanceDate]);
 
     // -- Syllabus State --
     const [lessonPlanData, setLessonPlanData] = useState(() => {
@@ -547,19 +595,13 @@ const FacultyDashboard = () => {
             isActive: activeSection === 'CIE Entry',
             onClick: () => { setActiveSection('CIE Entry'); setSelectedSubject(null); }
         },
+
         {
-            label: 'CIE Schedule',
-            path: '/dashboard/faculty',
-            icon: <Calendar size={20} />, // Changed icon for relevance
-            isActive: activeSection === 'CIE Schedule',
-            onClick: () => { setActiveSection('CIE Schedule'); setSelectedSubject(null); }
-        },
-        {
-            label: 'Proctoring',
+            label: 'Mentorship',
             path: '/dashboard/faculty',
             icon: <UserCheck size={20} />,
-            isActive: activeSection === 'Proctoring',
-            onClick: () => { setActiveSection('Proctoring'); setSelectedSubject(null); }
+            isActive: activeSection === 'Mentorship',
+            onClick: () => { setActiveSection('Mentorship'); setSelectedSubject(null); }
         },
         {
             label: 'Low Performers',
@@ -574,13 +616,6 @@ const FacultyDashboard = () => {
             icon: <Bell size={20} />,
             isActive: activeSection === 'Notifications',
             onClick: () => { setActiveSection('Notifications'); setSelectedSubject(null); }
-        },
-        {
-            label: 'My Announcements',
-            path: '/dashboard/faculty',
-            icon: <Megaphone size={20} />,
-            isActive: activeSection === 'My Announcements',
-            onClick: () => { setActiveSection('My Announcements'); setSelectedSubject(null); }
         },
     ];
 
@@ -608,22 +643,20 @@ const FacultyDashboard = () => {
 
                 // Initialize empty for all current students
                 students.forEach(s => {
-                    newMarks[s.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', attendance: 0 };
+                    newMarks[s.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
                 });
 
                 data.forEach(m => {
                     if (m.student && m.student.id) {
                         const sId = m.student.id;
-                        if (!newMarks[sId]) newMarks[sId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', attendance: 0 };
+                        if (!newMarks[sId]) newMarks[sId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
 
                         // Backend returns 'cieType' (e.g., 'CIE1'), not 'iaType'
-                        const key = (m.cieType || m.iaType || '').toLowerCase(); // cie1
-                        if (key) newMarks[sId][key] = m.totalScore || ''; // Use totalScore
 
-                        // Capture Attendance (Max of all entries if multiple)
-                        if (m.attendance) {
-                            newMarks[sId].attendance = Math.max(newMarks[sId].attendance, m.attendance);
-                        }
+                        const key = m.cieType ? m.cieType.toLowerCase() : (m.iaType ? m.iaType.toLowerCase() : null);
+                        if (key && newMarks[sId]) newMarks[sId][key] = m.totalScore || ''; // Use totalScore
+
+
                     }
                 });
                 setMarks(newMarks);
@@ -670,7 +703,7 @@ const FacultyDashboard = () => {
             setAllStudentMarks(prev => ({
                 ...prev,
                 [selectedSubject.id]: {
-                    ...prev[selectedSubject.id],
+                    ...prev[selectedSubject.id]?.[studentId],
                     [studentId]: {
                         ...prev[selectedSubject.id]?.[studentId],
                         [field]: numValue
@@ -922,16 +955,7 @@ const FacultyDashboard = () => {
         const percentage = calculateStudentPercentage(selectedStudent);
         const grade = calculateGradeFromPercentage(percentage);
 
-        // Calculate max attendance across subjects
-        let realAttendance = selectedStudent.attendance || 0;
-        if (allStudentMarks) {
-            Object.keys(allStudentMarks).forEach(subId => {
-                const sMarks = allStudentMarks[subId][selectedStudent.id];
-                if (sMarks && sMarks.attendance) {
-                    realAttendance = Math.max(realAttendance, sMarks.attendance);
-                }
-            });
-        }
+
 
         // Status Logic
         let statusLabel = 'Good Standing';
@@ -943,10 +967,8 @@ const FacultyDashboard = () => {
         } else if (grade === 'D') {
             statusLabel = 'Average';
             statusColor = '#d97706'; // Orange
-        } else if (realAttendance < 75) {
-            statusLabel = 'Attendance Shortage';
-            statusColor = '#dc2626';
         }
+
 
         return (
             <div className={styles.modalOverlay} onClick={() => setShowProfileModal(false)}>
@@ -976,18 +998,7 @@ const FacultyDashboard = () => {
                                 <span className={styles.infoLabel}>Email Address</span>
                                 <span className={styles.infoValue}>{(selectedStudent.rollNo || selectedStudent.regNo).toLowerCase()}@college.edu</span>
                             </div>
-                            <div className={styles.infoItem}>
-                                <span className={styles.infoLabel}>Attendance</span>
-                                <div className={styles.attendanceBarContainer}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                        <span>Current Semester</span>
-                                        <span style={{ fontWeight: 'bold' }}>{realAttendance}%</span>
-                                    </div>
-                                    <div className={styles.attendanceTrack}>
-                                        <div className={styles.attendanceFill} style={{ width: `${realAttendance}%`, backgroundColor: realAttendance < 75 ? '#dc2626' : '#10b981' }}></div>
-                                    </div>
-                                </div>
-                            </div>
+
                             <div className={styles.infoItem}>
                                 <span className={styles.infoLabel}>Academic Standing</span>
                                 <span className={styles.infoValue} style={{ color: statusColor }}>{statusLabel} ({grade})</span>
@@ -1127,24 +1138,8 @@ const FacultyDashboard = () => {
                 </div>
             </div>
 
-            {
-                attendanceDefaulters.length > 0 && (
-                    <div className={styles.alertBanner} style={{ backgroundColor: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ backgroundColor: '#ef4444', padding: '0.5rem', borderRadius: '50%', color: 'white' }}>
-                            <AlertTriangle size={24} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1rem', fontWeight: '600' }}>Critical Attendance Alert</h3>
-                            <p style={{ margin: '0.25rem 0 0', color: '#b91c1c', fontSize: '0.9rem' }}>
-                                {attendanceDefaulters.length} students have less than 75% attendance. Immediate action required.
-                            </p>
-                        </div>
-                        <button className={styles.saveBtn} style={{ backgroundColor: '#dc2626' }} onClick={() => setActiveSection('My Students')}>
-                            View List
-                        </button>
-                    </div>
-                )
-            }
+
+
 
 
 
@@ -1293,9 +1288,9 @@ const FacultyDashboard = () => {
                 // or just accept it for now but user asked for filtering.
 
                 // Proceeding with helper usage.
-                const percentage = calculateStudentPercentage(s);
-                const g = calculateGradeFromPercentage(percentage);
-                return g === selectedGradeFilter;
+                // Proceeding with helper usage.
+                const { grade } = getStudentPerformance(s.id);
+                return grade === selectedGradeFilter;
             })
             .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1362,58 +1357,11 @@ const FacultyDashboard = () => {
                             </thead>
                             <tbody>
                                 {filteredStudents.map((std, index) => {
-                                    // Generate mock performance data if missing
-                                    // const attendance = std.attendance || Math.floor(Math.random() * 20) + 80; // REMOVED MOCK
-                                    // Calculate Real Grade & Status
-
-                                    // 1. Aggregate marks from all enrolled subjects
-                                    // We need to find which subjects this student is enrolled in that THIS faculty teaches.
-                                    // Then average the CIEs? Or just take the max?
-                                    // Typically "Grade" is per subject. But "My Students" is a list.
-                                    // If a student is in multiple subjects taught by this faculty, which grade to show?
-                                    // For simplicity, let's average the performance across all subjects taught by this faculty.
-
-                                    let totalPerformance = 0;
-                                    let subjectCount = 0;
-                                    let realAttendance = 0;
-                                    let hasData = false;
-
-                                    Object.keys(allStudentMarks).forEach(subId => {
-                                        const sMarks = allStudentMarks[subId][std.id];
-                                        if (sMarks) {
-                                            hasData = true;
-                                            // Avg of CIEs for this subject
-                                            const c1 = Number(sMarks.cie1 || 0);
-                                            const c2 = Number(sMarks.cie2 || 0);
-                                            const c3 = Number(sMarks.cie3 || 0); // Include if exists
-                                            const c4 = Number(sMarks.cie4 || 0);
-                                            const c5 = Number(sMarks.cie5 || 0);
-
-                                            // Assuming max is 50 per CIE.
-                                            // Let's just sum valid ones and average? 
-                                            // Or sum and divide by number of CIEs conducted? 
-                                            // Simplified: Average of non-empty CIEs
-                                            const scores = [sMarks.cie1, sMarks.cie2, sMarks.cie3, sMarks.cie4, sMarks.cie5].filter(x => x !== '' && x !== 'Ab' && x !== undefined).map(Number);
-
-                                            if (scores.length > 0) {
-                                                const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-                                                // Normalized to 100? CIE is usually 50. So avg is out of 50.
-                                                // Let's percentagize it: (avg / 50) * 100
-                                                const percent = (avg / 50) * 100;
-                                                totalPerformance += percent;
-                                                subjectCount++;
-                                            }
-
-                                            if (sMarks.attendance) realAttendance = Math.max(realAttendance, sMarks.attendance);
-                                        }
-                                    });
-
-                                    const finalPercentage = subjectCount > 0 ? (totalPerformance / subjectCount) : 0;
-                                    const grade = hasData ? calculateGradeFromPercentage(finalPercentage) : 'N/A';
-                                    const attendance = hasData ? realAttendance : (std.attendance || 0); // Use 0 if no data
-                                    const isRisk = attendance > 0 && attendance < 75; // Only risk if we have data
+                                    // Calculate Real Grade & Status using central helper
+                                    const { grade, hasData } = getStudentPerformance(std.id);
 
                                     let gradeColor = '#6b7280'; // Gray for N/A
+
                                     let gradeBg = '#f3f4f6';
 
                                     if (grade === 'A') { gradeColor = '#166534'; gradeBg = '#f0fdf4'; }
@@ -1430,7 +1378,7 @@ const FacultyDashboard = () => {
                                     if (!hasData) {
                                         statusStyle = styles.statusAverage; // Neutral
                                         StatusIcon = AlertCircle;
-                                    } else if (grade === 'F' || isRisk) {
+                                    } else if (grade === 'F') {
                                         statusLabel = 'At Risk';
                                         statusStyle = styles.statusRisk;
                                         StatusIcon = AlertTriangle;
@@ -1653,7 +1601,7 @@ const FacultyDashboard = () => {
                                     <th>CIE-3 (50)</th>
                                     <th>CIE-4 (50)</th>
                                     <th>CIE-5 (50)</th>
-                                    <th>Attendance (%)</th>
+
                                     <th>Total (250)</th>
                                 </tr>
                             </thead>
@@ -1672,9 +1620,7 @@ const FacultyDashboard = () => {
                                         const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
                                         const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
 
-                                        // Attendance Value
-                                        const valAtt = sMarks.attendance || 0;
-                                        const attColor = valAtt < 75 ? '#ef4444' : '#16a34a';
+
 
                                         return (
                                             <tr key={student.id}>
@@ -1726,8 +1672,7 @@ const FacultyDashboard = () => {
                                                         disabled={isLocked}
                                                     />
                                                 </td>
-                                                {/* Attendance Column */}
-                                                <td style={{ fontWeight: 'bold', color: attColor }}>{valAtt}%</td>
+
                                                 {/* Final Total */}
                                                 <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
                                             </tr>
@@ -1743,172 +1688,35 @@ const FacultyDashboard = () => {
 
 
 
-    const renderAttendance = () => {
-        if (!selectedSubject) {
-            return (
-                <div className={styles.emptyState}>
-                    <div style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
-                        <h2 className={styles.sectionTitle}>Mark Attendance</h2>
-                        <p style={{ color: '#6b7280' }}>Select a subject to mark attendance.</p>
-                    </div>
-                    <div className={styles.cardsGrid}>
-                        {mySubjects.map(sub => (
-                            <div key={sub.id} className={styles.subjectCard} onClick={() => { setSelectedSubject(sub); setSavedAttendance(false); }}>
-                                <div className={styles.cardHeader}>
-                                    <h3 className={styles.subjectName}>{sub.name}</h3>
-                                    <span className={styles.termBadge} style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem' }}>{sub.semester} Sem</span>
-                                </div>
-                                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#6b7280', fontSize: '0.9rem' }}>
-                                    <UserCheck size={16} />
-                                    <span>Mark Today's Attendance</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-        }
 
-        // Key for storage
-        const key = `${selectedSubject.id}-${attendanceDate}`;
-        const currentData = attendanceData[key] || {};
 
-        // Use Real Students
-        const classStudents = students.filter(s => s.semester === selectedSubject.semester);
+    const renderMentorship = () => {
+        // Filter real students from API
+        const realMentees = students.filter(s => menteeIds.includes(s.id));
 
-        // Stats
-        const total = classStudents.length;
+        // Combine with manually added mentees
+        const allMentees = [...realMentees, ...manualMentees];
 
-        const presentCount = classStudents.filter(s => (currentData[s.id] || 'Present') === 'Present').length;
-        const absentCount = total - presentCount;
-
-        return (
-            <div className={styles.sectionContainer}>
-                <div className={styles.backLink} onClick={() => setSelectedSubject(null)} style={{ color: '#6b7280', marginBottom: '1rem', display: 'inline-flex', cursor: 'pointer', alignItems: 'center' }}>
-                    <span style={{ marginRight: '0.5rem' }}>←</span> Back to Subject List
-                </div>
-
-                <div className={styles.sectionHeader}>
-                    <div>
-                        <h2 className={styles.sectionTitle}>Attendance: {selectedSubject.name}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
-                            <input
-                                type="date"
-                                value={attendanceDate}
-                                onChange={(e) => setAttendanceDate(e.target.value)}
-                                className={styles.searchInput}
-                                style={{ width: 'auto' }}
-                            />
-                            <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                                Total: <strong>{total}</strong> | Present: <strong style={{ color: '#16a34a' }}>{presentCount}</strong> | Absent: <strong style={{ color: '#dc2626' }}>{absentCount}</strong>
-                            </span>
-                        </div>
-                    </div>
-                    <div className={styles.headerActions}>
-                        <button className={styles.saveBtn} onClick={() => window.open(`http://127.0.0.1:8083/api/reports/attendance/${selectedSubject.id}/csv`, '_blank')} style={{ marginRight: '1rem', backgroundColor: '#3b82f6' }}>
-                            <Download size={16} /> Export CSV
-                        </button>
-                        <button className={styles.saveBtn} onClick={saveAttendance} disabled={savedAttendance}>
-                            <Save size={16} />
-                            {savedAttendance ? 'Saved' : 'Save Attendance'}
-                        </button>
-                    </div>
-                </div>
-
-                <div className={styles.tableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th style={{ width: '60px' }}>Sl No</th>
-                                <th>Reg No</th>
-                                <th>Student Name</th>
-                                <th>Attendance %</th>
-                                <th>Status</th>
-                                <th style={{ width: '150px' }}>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {classStudents.map((std, index) => {
-                                const status = currentData[std.id] || 'Present';
-                                return (
-                                    <tr key={std.id} style={{ backgroundColor: status === 'Absent' ? '#fef2f2' : 'inherit' }}>
-                                        <td style={{ color: '#6b7280' }}>{String(index + 1).padStart(2, '0')}</td>
-                                        <td className={styles.codeText}>{std.rollNo || std.regNo}</td>
-                                        <td>
-                                            <div className={styles.studentNameCell}>
-                                                <div className={styles.avatar} style={{
-                                                    width: '28px', height: '28px', fontSize: '0.8rem',
-                                                    background: `linear-gradient(135deg, ${['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'][index % 5]} 0%, ${['#1d4ed8', '#047857', '#b45309', '#6d28d9', '#be185d'][index % 5]} 100%)`
-                                                }}>
-                                                    {std.name.charAt(0)}
-                                                </div>
-                                                {std.name}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span style={{
-                                                fontWeight: 'bold',
-                                                color: (std.attendance || 0) < 75 ? '#dc2626' : '#16a34a'
-                                            }}>
-                                                {std.attendance || 0}%
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button
-                                                    style={{
-                                                        padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem',
-                                                        borderColor: status === 'Present' ? '#16a34a' : '#d1d5db',
-                                                        backgroundColor: status === 'Present' ? '#dcfce7' : 'white',
-                                                        color: status === 'Present' ? '#166534' : '#6b7280'
-                                                    }}
-                                                    onClick={() => handleAttendanceChange(std.id, 'Present')}
-                                                >
-                                                    Present
-                                                </button>
-                                                <button
-                                                    style={{
-                                                        padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem',
-                                                        borderColor: status === 'Absent' ? '#dc2626' : '#d1d5db',
-                                                        backgroundColor: status === 'Absent' ? '#fee2e2' : 'white',
-                                                        color: status === 'Absent' ? '#991b1b' : '#6b7280'
-                                                    }}
-                                                    onClick={() => handleAttendanceChange(std.id, 'Absent')}
-                                                >
-                                                    Absent
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            {status === 'Absent' && (
-                                                <button className={styles.iconBtn} style={{ color: '#dc2626' }} title="Notify Parent" onClick={() => showToast(`SMS sent to ${std.name}'s parent`)}>
-                                                    <Mail size={16} /> Send SMS
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
-
-    const renderProctoring = () => {
         // Calculate performance color
         const getPerformanceColor = (avg) => {
-            if (avg < 60) return { bg: '#fee2e2', text: '#b91c1c', icon: <AlertTriangle size={14} /> }; // Red
-            if (avg < 75) return { bg: '#fef3c7', text: '#b45309', icon: <AlertCircle size={14} /> }; // Yellow
-            return { bg: '#dcfce7', text: '#15803d', icon: <CheckCircle size={14} /> }; // Green
+            if (avg < 40) return { bg: '#fee2e2', text: '#b91c1c', icon: <AlertTriangle size={14} /> };
+            if (avg < 75) return { bg: '#fef3c7', text: '#b45309', icon: <AlertCircle size={14} /> };
+            return { bg: '#dcfce7', text: '#15803d', icon: <CheckCircle size={14} /> };
         };
 
         return (
             <div className={styles.sectionContainer}>
                 <div className={styles.sectionHeader}>
-                    <h2 className={styles.sectionTitle}>Mentorship / Proctoring</h2>
+                    <div>
+                        <h2 className={styles.sectionTitle}>Mentorship / Proctoring</h2>
+                        <p style={{ color: '#64748b', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                            Managing {allMentees.length} students under mentorship.
+                        </p>
+                    </div>
                     <div className={styles.headerActions}>
+                        <button className={styles.saveBtn} onClick={() => setShowMenteeModal(true)} style={{ background: '#2563eb' }}>
+                            <FilePlus size={16} /> Add New Student
+                        </button>
                         <button className={styles.filterBtn} onClick={() => showToast('Meeting Logs Downloaded')}>
                             <Download size={16} /> Export Logs
                         </button>
@@ -1921,14 +1729,35 @@ const FacultyDashboard = () => {
                             <tr>
                                 <th>Student Details</th>
                                 <th>Parent Contact</th>
-                                <th>Attendance</th>
+
                                 <th>Academic Standing (CIE Avg)</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {myMentees.map(student => {
-                                // Mock Average Calculation for display
-                                const avgScore = student.marks ? Math.round(((student.marks.ia1 + student.marks.ia2) / 60) * 100) : Math.floor(Math.random() * 40) + 50;
+                            {allMentees.length > 0 ? allMentees.map(student => {
+                                const avgScore = student.isManual ? parseInt(student.avgMark) || 0 : (() => {
+                                    let totalScored = 0;
+                                    let count = 0;
+                                    if (allStudentMarks) {
+                                        Object.keys(allStudentMarks).forEach(subId => {
+                                            const m = allStudentMarks[subId][student.id];
+                                            if (m) {
+                                                const cies = ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'];
+                                                cies.forEach(cKey => {
+                                                    const val = m[cKey];
+                                                    if (val !== undefined && val !== null && val !== '') {
+                                                        totalScored += (val === 'Ab' ? 0 : (parseInt(val) || 0));
+                                                        count++;
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+                                    return count > 0 ? Math.round((totalScored / (count * 50)) * 100) : 0;
+                                })();
+
+
                                 const perf = getPerformanceColor(avgScore);
 
                                 return (
@@ -1943,25 +1772,17 @@ const FacultyDashboard = () => {
                                                 </div>
                                                 <div>
                                                     <div style={{ fontWeight: '600', color: '#111827' }}>{student.name}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{student.rollNo || student.regNo}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{student.regNo || student.rollNo}</div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 <span style={{ fontWeight: '500', fontSize: '0.9rem' }}>{student.parentPhone}</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Relationship: Father</span>
+                                                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Relationship: Parent</span>
                                             </div>
                                         </td>
-                                        <td>
-                                            <span style={{
-                                                fontWeight: 'bold',
-                                                fontSize: '1.1rem',
-                                                color: (student.attendance || 0) < 75 ? '#dc2626' : '#16a34a'
-                                            }}>
-                                                {student.attendance || 0}%
-                                            </span>
-                                        </td>
+
                                         <td>
                                             <span style={{
                                                 display: 'inline-flex',
@@ -1975,12 +1796,42 @@ const FacultyDashboard = () => {
                                                 fontSize: '0.85rem'
                                             }}>
                                                 {perf.icon}
-                                                {avgScore}% Avg
+                                                {avgScore > 0 ? `${avgScore}% Avg` : 'No Data'}
                                             </span>
+                                        </td>
+                                        <td>
+                                            <button
+                                                className={styles.iconBtn}
+                                                onClick={() => handleEditStudent(student)}
+                                                style={{ color: '#0ea5e9', background: '#e0f2fe', padding: '6px', marginRight: '8px' }}
+                                                title="Edit Student Details"
+                                            >
+                                                <Edit3 size={16} />
+                                            </button>
+                                            <button
+                                                className={styles.iconBtn}
+                                                onClick={() => handleRemoveMentee(student.id)}
+                                                style={{ color: '#dc2626', background: '#fee2e2', padding: '6px' }}
+                                                title="Remove from Mentorship"
+                                            >
+                                                <X size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 );
-                            })}
+                            }) : (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                            <Users size={32} style={{ opacity: 0.5 }} />
+                                            <p>No students assigned for mentorship.</p>
+                                            <button className={styles.secondaryBtn} onClick={() => setShowMenteeModal(true)}>
+                                                + Add Your First Student
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -2093,6 +1944,64 @@ const FacultyDashboard = () => {
                             </div>
                         );
                     })}
+                </div>
+            </div>
+        );
+    };
+
+    const renderEditStudentModal = () => {
+        if (!showEditModal || !editingStudent) return null;
+
+        return (
+            <div className={styles.modalOverlay} onClick={() => setShowEditModal(false)}>
+                <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.modalHeader}>
+                        <h2>Edit Student Details</h2>
+                        <button className={styles.closeBtn} onClick={() => setShowEditModal(false)}>
+                            <X size={20} />
+                        </button>
+                    </div>
+                    <div className={styles.modalBody}>
+                        <form onSubmit={handleUpdateStudent}>
+                            <div className={styles.formGroup}>
+                                <label>Student Name</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.name || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label>Register Number</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.regNo || editingStudent.rollNo || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, regNo: e.target.value })}
+                                />
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label>Parent Phone</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.parentPhone || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, parentPhone: e.target.value })}
+                                />
+                            </div>
+
+                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button type="button" className={styles.filterBtn} onClick={() => setShowEditModal(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className={styles.saveBtn}>
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         );
@@ -2490,58 +2399,6 @@ const FacultyDashboard = () => {
         );
     };
 
-    // Render My Announcements Section
-    const renderMyAnnouncements = () => {
-        return (
-            <div className={styles.card}>
-                <h2 className={styles.cardTitle}>My CIE Announcements</h2>
-                <div className={styles.tableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th>Subject</th>
-                                <th>CIE Number</th>
-                                <th>Scheduled Date</th>
-                                <th>Start Time</th>
-                                <th>Room</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {myAnnouncements.length > 0 ? myAnnouncements.map(ann => (
-                                <tr key={ann.id}>
-                                    <td>
-                                        <div className={styles.subjectCell}>
-                                            <span className={styles.subjectName}>{ann.Subject?.name || 'N/A'}</span>
-                                            <span className={styles.subjectCode}>{ann.Subject?.code || ''}</span>
-                                        </div>
-                                    </td>
-                                    <td>CIE {ann.cieNumber}</td>
-                                    <td>{new Date(ann.scheduledDate).toLocaleDateString()}</td>
-                                    <td>{ann.startTime}</td>
-                                    <td>{ann.examRoom}</td>
-                                    <td>
-                                        <span className={`${styles.badge} ${ann.status === 'SCHEDULED' ? styles.good : styles.needsFocus}`}>
-                                            {ann.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <div className={styles.emptyState}>
-                                            <Megaphone size={48} />
-                                            <p>No announcements created yet</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <DashboardLayout menuItems={menuItems} >
@@ -2560,17 +2417,219 @@ const FacultyDashboard = () => {
             }
             {activeSection === 'My Students' && renderMyStudents()}
             {activeSection === 'CIE Entry' && renderCIEEntry()}
-            {activeSection === 'Attendance' && renderAttendance()}
+
             {activeSection === 'Lesson Plan' && renderLessonPlan()}
             {activeSection === 'CIE Schedule' && renderCIESchedule()}
-            {activeSection === 'Proctoring' && renderProctoring()}
+            {activeSection === 'Mentorship' && renderMentorship()}
             {activeSection === 'Low Performers' && renderLowPerformers()}
             {activeSection === 'Notifications' && renderNotifications()}
-            {activeSection === 'My Announcements' && renderMyAnnouncements()}
 
             {/* MODALS */}
             {renderStudentProfileModal()}
             {renderUploadModal()}
+            {showMenteeModal && (
+                <div className={styles.modalOverlay} onClick={() => setShowMenteeModal(false)}>
+                    <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+                        <div className={styles.modalHeader}>
+                            <h2>Add New Student to Mentorship</h2>
+                            <button className={styles.closeBtn} onClick={() => setShowMenteeModal(false)}><X size={20} /></button>
+                        </div>
+                        <div className={styles.modalBody}>
+                            <div className={styles.tabHeader} style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+                                <button
+                                    className={modalTab === 'select' ? styles.tabBtnActive : styles.tabBtn}
+                                    onClick={() => setModalTab('select')}
+                                    style={{ background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 'bold', borderBottom: modalTab === 'select' ? '2px solid #2563eb' : 'none', color: modalTab === 'select' ? '#2563eb' : '#64748b' }}
+                                >
+                                    Quick Select (Dept Students)
+                                </button>
+                                <button
+                                    className={modalTab === 'manual' ? styles.tabBtnActive : styles.tabBtn}
+                                    onClick={() => setModalTab('manual')}
+                                    style={{ background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 'bold', borderBottom: modalTab === 'manual' ? '2px solid #2563eb' : 'none', color: modalTab === 'manual' ? '#2563eb' : '#64748b' }}
+                                >
+                                    Manual Entry
+                                </button>
+                            </div>
+
+                            {modalTab === 'select' ? (
+                                <>
+                                    <div className={styles.searchWrapper} style={{ marginBottom: '1.5rem' }}>
+                                        <Search className={styles.searchIcon} size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search from 63 students in your department..."
+                                            className={styles.searchInput}
+                                            style={{ width: '100%' }}
+                                            value={menteeSearchTerm}
+                                            onChange={(e) => setMenteeSearchTerm(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    <div className={styles.tableContainer} style={{ maxHeight: '450px', overflowY: 'auto' }}>
+                                        <table className={styles.table}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Student Details</th>
+
+                                                    <th>Avg</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {students
+                                                    .filter(s =>
+                                                        (s.name.toLowerCase().includes(menteeSearchTerm.toLowerCase()) ||
+                                                            (s.regNo && s.regNo.toLowerCase().includes(menteeSearchTerm.toLowerCase())) ||
+                                                            (s.rollNo && s.rollNo.toLowerCase().includes(menteeSearchTerm.toLowerCase()))) &&
+                                                        !menteeIds.includes(s.id) &&
+                                                        s.department === user?.department
+                                                    )
+                                                    .slice(0, 100) // Show all relevant students
+                                                    .map(std => {
+                                                        // Calculate marks
+                                                        let totalScored = 0;
+                                                        let count = 0;
+                                                        if (allStudentMarks) {
+                                                            Object.keys(allStudentMarks).forEach(subId => {
+                                                                const m = allStudentMarks[subId][std.id];
+                                                                if (m) {
+                                                                    ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(cKey => {
+                                                                        const val = m[cKey];
+                                                                        if (val !== undefined && val !== null && val !== '') {
+                                                                            totalScored += (val === 'Ab' ? 0 : (parseInt(val) || 0));
+                                                                            count++;
+                                                                        }
+                                                                    });
+                                                                }
+                                                            });
+                                                        }
+                                                        const avg = count > 0 ? Math.round((totalScored / (count * 50)) * 100) : 0;
+
+                                                        let realAtt = 0; // std.attendance || 0; // Removed attendance logic
+
+
+                                                        return (
+                                                            <tr key={std.id}>
+                                                                <td>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <div className={styles.avatar} style={{ width: '24px', height: '24px', fontSize: '0.7rem' }}>{std.name.charAt(0)}</div>
+                                                                        <div>
+                                                                            <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{std.name}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{std.regNo || std.rollNo}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+
+                                                                <td>
+                                                                    <span className={styles.badge} style={{
+                                                                        fontSize: '0.7rem',
+                                                                        backgroundColor: avg < 40 ? '#fee2e2' : (avg < 75 ? '#fef3c7' : '#dcfce7'),
+                                                                        color: avg < 40 ? '#b91c1c' : (avg < 75 ? '#b45309' : '#15803d')
+                                                                    }}>
+                                                                        {count > 0 ? `${avg}%` : 'N/A'}
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <button className={styles.saveBtn} style={{ padding: '3px 8px', fontSize: '0.7rem' }} onClick={() => handleAddMentee(std.id)}>Add</button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                        </table>
+                                        {students.filter(s => s.department === user?.department && !menteeIds.includes(s.id)).length === 0 && (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>All department students are already in your mentorship list.</div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <form onSubmit={handleAddManualStudent} className={styles.manualEntryForm}>
+                                    <div className={styles.infoGrid} style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Registration Number</label>
+                                            <input
+                                                type="text"
+                                                className={styles.largeInput}
+                                                placeholder="e.g. 459CS25001"
+                                                required
+                                                maxLength={10}
+                                                value={newStudentForm.regNo}
+                                                onChange={(e) => setNewStudentForm({ ...newStudentForm, regNo: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Student Name</label>
+                                            <input
+                                                type="text"
+                                                className={styles.largeInput}
+                                                placeholder="Ex: John Doe"
+                                                required
+                                                value={newStudentForm.name}
+                                                onChange={(e) => {
+                                                    // Only allow letters and spaces
+                                                    if (/^[a-zA-Z\s]*$/.test(e.target.value)) {
+                                                        setNewStudentForm({ ...newStudentForm, name: e.target.value });
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Parent Contact</label>
+                                            <input
+                                                type="tel"
+                                                className={styles.largeInput}
+                                                placeholder="Phone Number"
+                                                required
+                                                value={newStudentForm.parentPhone}
+                                                onChange={(e) => {
+                                                    // Only allow numbers
+                                                    if (/^[0-9]*$/.test(e.target.value)) {
+                                                        setNewStudentForm({ ...newStudentForm, parentPhone: e.target.value });
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Academic CIE Avg (%)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.largeInput}
+                                                placeholder="0-100"
+                                                min="0"
+                                                max="100"
+                                                required
+                                                value={newStudentForm.avgMark}
+                                                onChange={(e) => setNewStudentForm({ ...newStudentForm, avgMark: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                        <button
+                                            type="button"
+                                            className={styles.filterBtn}
+                                            onClick={() => setShowMenteeModal(false)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className={styles.saveBtn}
+                                        >
+                                            Add Student
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {renderEditStudentModal()}
 
             {
                 toast.show && (
@@ -2584,15 +2643,5 @@ const FacultyDashboard = () => {
     );
 };
 
-
-
-const calculateGradeFromPercentage = (percentage) => {
-    if (percentage >= 90) return 'S';
-    if (percentage >= 80) return 'A';
-    if (percentage >= 70) return 'B';
-    if (percentage >= 60) return 'C';
-    if (percentage >= 50) return 'D';
-    return 'F';
-};
 
 export default FacultyDashboard;

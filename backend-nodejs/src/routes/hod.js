@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, roleMiddleware } = require('../middleware/auth');
-const { User, Subject, CIEMark, Student } = require('../models');
+const { User, Subject, CIEMark, Student, Attendance, Announcement, Notification, Resource } = require('../models');
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 
 // HOD dashboard
 router.get('/dashboard', authMiddleware, roleMiddleware('HOD'), (req, res) => {
@@ -127,13 +128,76 @@ router.get('/overview', authMiddleware, roleMiddleware('HOD', 'PRINCIPAL'), asyn
             });
         }
 
-        // 4. Faculty count
+        // 4. Compute CIE Trend (Averages per CIE round)
+        const cieStats = {
+            'CIE1': { total: 0, count: 0 },
+            'CIE2': { total: 0, count: 0 },
+            'CIE3': { total: 0, count: 0 },
+            'CIE4': { total: 0, count: 0 },
+            'CIE5': { total: 0, count: 0 }
+        };
+
+        marks.forEach(m => {
+            const type = (m.cieType || m.cie_type || '').toUpperCase();
+            let target = null;
+            if (cieStats[type]) target = type;
+            else if (type.includes('1')) target = 'CIE1';
+            else if (type.includes('2')) target = 'CIE2';
+            else if (type.includes('3')) target = 'CIE3';
+            else if (type.includes('4')) target = 'CIE4';
+            else if (type.includes('5')) target = 'CIE5';
+
+            if (target) {
+                cieStats[target].total += (m.marks || 0);
+                cieStats[target].count++;
+            }
+        });
+
+        const cieTrend = {};
+        Object.keys(cieStats).forEach(key => {
+            cieTrend[key] = cieStats[key].count > 0
+                ? parseFloat((cieStats[key].total / cieStats[key].count).toFixed(1))
+                : 0;
+        });
+
+        // 5. Compute Subject-wise Performance
+        const subjects = await Subject.findAll({ where: { department: dept } });
+        const subjectPerfList = subjects.map(s => {
+            const sMarks = marks.filter(m => m.subjectId === s.id);
+            const sStats = { 'CIE1': { t: 0, c: 0 }, 'CIE2': { t: 0, c: 0 }, 'CIE3': { t: 0, c: 0 }, 'CIE4': { t: 0, c: 0 }, 'CIE5': { t: 0, c: 0 } };
+
+            sMarks.forEach(m => {
+                const type = (m.cieType || m.cie_type || '').toUpperCase();
+                let target = null;
+                if (sStats[type]) target = type;
+                else if (type.includes('1')) target = 'CIE1';
+                else if (type.includes('2')) target = 'CIE2';
+                else if (type.includes('3')) target = 'CIE3';
+                else if (type.includes('4')) target = 'CIE4';
+                else if (type.includes('5')) target = 'CIE5';
+                if (target) { sStats[target].t += (m.marks || 0); sStats[target].c++; }
+            });
+
+            const averages = {};
+            let gTotal = 0, gCount = 0;
+            Object.keys(sStats).forEach(k => {
+                const avg = sStats[k].c > 0 ? parseFloat((sStats[k].t / sStats[k].c).toFixed(1)) : 0;
+                averages[k] = avg;
+                if (avg > 0) { gTotal += avg; gCount++; }
+            });
+            const overall = gCount > 0 ? parseFloat((gTotal / gCount).toFixed(1)) : 0;
+            return { id: s.id, name: s.name, averages, overall, passRate: Math.min(100, Math.round((overall / 50) * 100)) };
+        });
+
+        // 6. Faculty count
         const facultyCount = await User.count({ where: { role: 'FACULTY', department: dept } });
 
         res.json({
             gradeDistribution,
             alerts,
-            facultyCount
+            facultyCount,
+            cieTrend,
+            subjectPerfList
         });
 
     } catch (error) {
@@ -165,6 +229,8 @@ router.get('/faculty', authMiddleware, roleMiddleware('HOD', 'PRINCIPAL'), async
                 fullName: f.fullName || f.username,
                 department: f.department || 'General',
                 designation: 'Faculty',
+                semester: f.semester,
+                section: f.section,
                 subjects: subjects.map(s => s.name)
             };
         }));
@@ -180,7 +246,12 @@ router.get('/faculty', authMiddleware, roleMiddleware('HOD', 'PRINCIPAL'), async
 router.post('/faculty', authMiddleware, roleMiddleware('HOD'), async (req, res) => {
     try {
         const bcrypt = require('bcryptjs');
-        const { username, fullName, email, password, department, designation } = req.body;
+        const { username, fullName, email, password, department, designation, subjects, semester, section } = req.body;
+
+        // Check if user already exists
+        const existing = await User.findOne({ where: { username } });
+        if (existing) return res.status(400).json({ message: 'Username already exists' });
+
         const hashedPassword = await bcrypt.hash(password || 'password123', 10);
 
         const newFaculty = await User.create({
@@ -190,13 +261,164 @@ router.post('/faculty', authMiddleware, roleMiddleware('HOD'), async (req, res) 
             password: hashedPassword,
             role: 'FACULTY',
             department,
-            associatedId: username
+            associatedId: username,
+            semester,
+            section
         });
+
+        // Assign subjects if provided
+        if (subjects && Array.isArray(subjects)) {
+            for (const subName of subjects) {
+                // Find subject by name in the same department
+                await Subject.update(
+                    { instructorId: newFaculty.id.toString(), instructorName: fullName || username },
+                    {
+                        where: {
+                            [Op.and]: [
+                                sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), sequelize.fn('LOWER', subName)),
+                                { department: department }
+                            ]
+                        }
+                    }
+                );
+            }
+        }
 
         res.status(201).json({ message: 'Faculty created successfully', id: newFaculty.id });
     } catch (error) {
         console.error('Add faculty error:', error);
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({
+                message: 'Validation error',
+                details: error.errors.map(e => e.message)
+            });
+        }
         res.status(500).json({ message: error.message || 'Internal server error' });
+    }
+});
+
+// Update Faculty
+router.put('/faculty/:id', authMiddleware, roleMiddleware('HOD'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { fullName, email, designation, subjects, department, semester, section } = req.body;
+
+        const faculty = await User.findByPk(id);
+        if (!faculty) return res.status(404).json({ message: 'Faculty not found' });
+
+        // Update basic info
+        await faculty.update({
+            fullName: fullName || faculty.fullName,
+            email: email || faculty.email,
+            designation: designation || faculty.designation,
+            semester: semester !== undefined ? semester : faculty.semester,
+            section: section !== undefined ? section : faculty.section
+        });
+
+        // Update subjects assignment
+        if (subjects && Array.isArray(subjects)) {
+            // 1. Clear previous assignments for this instructor
+            await Subject.update(
+                { instructorId: null, instructorName: null },
+                { where: { instructorId: id.toString() } }
+            );
+
+            // 2. Assign new subjects
+            for (const subName of subjects) {
+                await Subject.update(
+                    { instructorId: id.toString(), instructorName: fullName || faculty.username },
+                    {
+                        where: {
+                            [Op.and]: [
+                                sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), sequelize.fn('LOWER', subName)),
+                                { department: department || faculty.department }
+                            ]
+                        }
+                    }
+                );
+            }
+        }
+
+        res.json({ message: 'Faculty updated successfully' });
+    } catch (error) {
+        console.error('Update faculty error:', error);
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({
+                message: 'Validation error',
+                details: error.errors.map(e => e.message)
+            });
+        }
+        res.status(500).json({ message: error.message || 'Internal server error' });
+    }
+});
+
+// Delete Faculty
+router.delete('/faculty/:id', authMiddleware, roleMiddleware('HOD'), async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        console.log(`[HOD DELETION] Attempting to remove faculty ID: ${id}`);
+
+        // 1. Check if faculty exists
+        const faculty = await User.findByPk(id);
+        if (!faculty) {
+            console.log(`[HOD DELETION] Faculty not found for ID: ${id}`);
+            await t.rollback();
+            return res.status(404).json({ message: 'Faculty not found' });
+        }
+
+        // 2. Clear instructor from assigned subjects
+        await Subject.update(
+            { instructorId: null, instructorName: null },
+            { where: { instructorId: id.toString() }, transaction: t }
+        );
+
+        // 3. Cleanup Attendance
+        await Attendance.update(
+            { facultyId: null },
+            { where: { facultyId: id }, transaction: t }
+        );
+
+        // 4. Cleanup Announcements
+        await Announcement.update(
+            { facultyId: null },
+            { where: { facultyId: id }, transaction: t }
+        );
+
+        // 5. Cleanup Resources
+        await Resource.update(
+            { uploadedBy: null },
+            { where: { uploadedBy: id }, transaction: t }
+        );
+
+        // 6. Delete User's Notifications
+        await Notification.destroy({
+            where: { userId: id },
+            transaction: t
+        });
+
+        // 7. Finally Delete the User record
+        await faculty.destroy({ transaction: t });
+
+        await t.commit();
+        console.log(`[HOD DELETION] SUCCESS: Faculty ${id} removed`);
+        res.json({ message: 'Faculty removed successfully' });
+    } catch (error) {
+        await t.rollback();
+        console.error('[HOD DELETION] ERROR:', error);
+
+        if (error.name === 'SequelizeForeignKeyConstraintError') {
+            return res.status(500).json({
+                message: 'Database Link Error: This faculty is connected to other records.',
+                details: error.parent.message,
+                table: error.table
+            });
+        }
+        res.status(500).json({
+            message: 'Error removing faculty: ' + error.message,
+            error: error.name,
+            details: error.parent ? error.parent.message : error.message
+        });
     }
 });
 

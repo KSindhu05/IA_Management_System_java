@@ -33,7 +33,6 @@ const StudentDashboard = () => {
         rollNo: user?.username || '...',
         branch: '...',
         semester: '...',
-        attendance: 0,
         cgpa: 0
     });
 
@@ -52,23 +51,27 @@ const StudentDashboard = () => {
                     const totalMarks = data.reduce((sum, m) => sum + (m.totalScore || 0), 0);
                     const totalMaxMarks = data.reduce((sum, m) => sum + (m.subject?.maxMarks || 50), 0);
                     let avgScore25 = totalMaxMarks > 0 ? Math.round((totalMarks / totalMaxMarks) * 25) : 0;
-                    const totalAttendance = data.reduce((sum, m) => sum + (m.attendancePercentage || 0), 0);
-                    const avgAttendance = data.length > 0 ? Math.round(totalAttendance / data.length) : 0;
 
                     // Dynamic Calculation of Aggregate Percentage
                     // Assuming totalMaxMarks is the sum of max marks for all subjects (e.g. 50 * numSubjects)
                     const aggregatePercentage = totalMaxMarks > 0 ? ((totalMarks / totalMaxMarks) * 100).toFixed(1) : 0;
 
+
                     if (data.length > 0) {
                         const s = data[0].student;
+
+                        // --- GLOBAL SYNC: Check for updates ---
+                        const globalUpdates = JSON.parse(localStorage.getItem('global_student_updates') || '{}');
+                        const updatedS = globalUpdates[s.id] || {};
+
                         setStudentInfo({
-                            name: s.name,
-                            rollNo: s.regNo,
+                            name: updatedS.name || s.name,
+                            rollNo: updatedS.regNo || s.regNo, // regNo mapped to rollNo in state
                             branch: s.department,
                             semester: s.semester,
-                            attendance: avgAttendance,
-                            cgpa: aggregatePercentage, // Using Percentage instead of CGPA
-                            avgCieScore: `${avgScore25}/25`
+                            cgpa: aggregatePercentage,
+                            avgCieScore: `${avgScore25}/25`,
+                            parentPhone: updatedS.parentPhone || s.parentPhone
                         });
                         // Automatically set the filter to current semester
                         setSelectedSemester(s.semester.toString());
@@ -81,7 +84,7 @@ const StudentDashboard = () => {
                         if (!mark.subject) return;
                         const subId = mark.subject.id;
                         if (!groupedMarks[subId]) {
-                            groupedMarks[subId] = { subject: mark.subject, cie1Score: null, cie2Score: null, cie3Score: null, cie4Score: null, cie5Score: null, totalScore: 0, attendance: 0, count: 0 };
+                            groupedMarks[subId] = { subject: mark.subject, cie1Score: null, cie2Score: null, cie3Score: null, cie4Score: null, cie5Score: null, totalScore: 0, count: 0 };
                         }
                         if (mark.cieType === 'CIE1') groupedMarks[subId].cie1Score = mark.totalScore;
                         else if (mark.cieType === 'CIE2') groupedMarks[subId].cie2Score = mark.totalScore;
@@ -89,9 +92,7 @@ const StudentDashboard = () => {
                         else if (mark.cieType === 'CIE4') groupedMarks[subId].cie4Score = mark.totalScore;
                         else if (mark.cieType === 'CIE5') groupedMarks[subId].cie5Score = mark.totalScore;
 
-                        // Attendance is usually cumulative or updated per CIE. 
-                        // We take the MAX attendance recorded to represent the latest status.
-                        groupedMarks[subId].attendance = Math.max(groupedMarks[subId].attendance, (mark.attendancePercentage || 0));
+
                         groupedMarks[subId].count++;
                     });
 
@@ -162,7 +163,7 @@ const StudentDashboard = () => {
     const menuItems = [
         { label: 'Overview', path: '/dashboard/student', icon: <LayoutDashboard size={20} />, isActive: activeSection === 'Overview', onClick: () => setActiveSection('Overview') },
         { label: 'CIE Marks', path: '/dashboard/student', icon: <FileText size={20} />, isActive: activeSection === 'CIE Marks', onClick: () => setActiveSection('CIE Marks') },
-        { label: 'Attendance', path: '/dashboard/student', icon: <Calendar size={20} />, isActive: activeSection === 'Attendance', onClick: () => setActiveSection('Attendance') },
+
         { label: 'Subjects', path: '/dashboard/student', icon: <Book size={20} />, isActive: activeSection === 'Subjects', onClick: () => setActiveSection('Subjects') },
         { label: 'Faculty', path: '/dashboard/student', icon: <User size={20} />, isActive: activeSection === 'Faculty', onClick: () => setActiveSection('Faculty') },
         { label: 'Syllabus Topics', path: '/dashboard/student', icon: <BookOpen size={20} />, isActive: activeSection === 'Syllabus Topics', onClick: () => setActiveSection('Syllabus Topics') },
@@ -223,15 +224,15 @@ const StudentDashboard = () => {
                 </div>
                 <div className={styles.tableContainer}>
                     <table className={styles.table}>
-                        <thead><tr><th>Subject</th><th>CIE-1</th><th>Total Progress</th><th>Attendance</th><th>Grade</th></tr></thead>
+                        <thead><tr><th>Subject</th><th>CIE-1</th><th>Total Progress</th><th>Grade</th></tr></thead>
                         <tbody>
                             {realSubjects.length > 0 ? realSubjects.map((sub, idx) => {
                                 const mark = realMarks.find(m => m.subject.id === sub.id) || {};
                                 const total = mark.cie1Score || 0;
                                 const maxMarks = 50; // Since only showing CIE-1
                                 const status = getStatus(total, maxMarks);
-                                const att = mark.attendance || 0;
-                                const attColor = att < 75 ? 'var(--danger)' : 'var(--success)';
+
+
                                 const progressWidth = Math.min((total / maxMarks) * 100, 100);
 
                                 return (
@@ -247,7 +248,6 @@ const StudentDashboard = () => {
                                                 <div className={styles.progressBar} style={{ width: `${progressWidth}%`, background: status.color }}></div>
                                             </div>
                                         </td>
-                                        <td style={{ fontWeight: 'bold', color: attColor }}>{att}%</td>
                                         <td><span className={styles.badge} style={{ color: status.color, background: status.bg }}>{status.label}</span></td>
                                     </tr>
                                 );
@@ -414,38 +414,7 @@ const StudentDashboard = () => {
         );
     };
 
-    const renderAttendance = () => (
-        <div className={styles.detailsContainer}>
-            <div className={styles.attendanceGrid}>
-                {realMarks.length > 0 ? realMarks.map((item, idx) => {
-                    const percentage = Math.min(item.attendance || 0, 100);
-                    const status = percentage >= 85 ? 'Excellent' : percentage >= 75 ? 'Good' : 'Needs Improvement';
-                    const cssClass = percentage >= 85 ? styles.excellent : percentage >= 75 ? styles.good : styles.needsFocus;
 
-                    // Conic gradient calculation
-                    const gradientStyle = {
-                        background: `conic-gradient(#3b82f6 0% ${percentage}%, #e2e8f0 ${percentage}% 100%)`
-                    };
-
-                    return (
-                        <div key={item.subject.id} className={styles.attendanceCard} style={{ animationDelay: `${idx * 0.1}s` }}>
-                            <div className={styles.attendanceHeader}>
-                                <h3 className={styles.attendanceSubject}>{item.subject.name}</h3>
-                                <span className={`${styles.badge} ${cssClass}`}>{status}</span>
-                            </div>
-                            <div className={styles.attendanceCircle} style={gradientStyle}>
-                                <span className={styles.attendancePercentage}>{percentage}%</span>
-                                <span className={styles.attendanceLabel}>Present</span>
-                            </div>
-                            <div className={styles.attendanceStats}>
-                                <div className={styles.attStat}><span>Subject Code</span><strong>{item.subject.code}</strong></div>
-                            </div>
-                        </div>
-                    );
-                }) : <div style={{ textAlign: 'center', padding: '3rem', width: '100%', gridColumn: '1/-1' }}><p>No attendance data available.</p></div>}
-            </div>
-        </div>
-    );
 
     // ... (rest of the file as is, just wrapped in render)
 
@@ -550,7 +519,7 @@ const StudentDashboard = () => {
                         studentInfo={studentInfo}
                         // Risk Logic: High if Aggregate < 40 OR Attendance < 75. Moderate if Aggregate < 60. Else Low.
                         riskLevel={
-                            (parseFloat(studentInfo.cgpa) < 40 || parseFloat(studentInfo.attendance) < 75) ? 'High' :
+                            (parseFloat(studentInfo.cgpa) < 40) ? 'High' :
                                 parseFloat(studentInfo.cgpa) < 60 ? 'Moderate' : 'Low'
                         }
                     />
@@ -558,7 +527,7 @@ const StudentDashboard = () => {
 
                 {activeSection === 'Overview' && renderOverview()}
                 {activeSection === 'CIE Marks' && renderCIEMarks()}
-                {activeSection === 'Attendance' && renderAttendance()}
+
                 {activeSection === 'Subjects' && renderSubjects()}
                 {activeSection === 'Faculty' && renderFaculty()}
                 {activeSection === 'Syllabus Topics' && renderSyllabusTopics()}

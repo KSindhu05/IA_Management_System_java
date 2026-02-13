@@ -54,16 +54,7 @@ const StudentProfileModal = ({ selectedStudentProfile, setSelectedStudentProfile
                         </div>
                     </div>
                     <div className={styles.glassCard} style={{ padding: '1rem' }}>
-                        <h4 style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.9rem' }}>Attendance & Behavior</h4>
-                        <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                <span>Attendance</span>
-                                <span style={{ fontWeight: 'bold', color: (s.attendance || 0) < 75 ? '#dc2626' : '#16a34a' }}>{s.attendance || 0}%</span>
-                            </div>
-                            <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px' }}>
-                                <div style={{ width: `${s.attendance || 0}%`, height: '100%', background: (s.attendance || 0) < 75 ? '#dc2626' : '#16a34a', borderRadius: '3px' }}></div>
-                            </div>
-                        </div>
+                        <h4 style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.9rem' }}>Behavior</h4>
                         <div>
                             <span style={{ padding: '4px 8px', background: '#f0f9ff', color: '#0284c7', borderRadius: '4px', fontSize: '0.8rem' }}>Good Conduct</span>
                         </div>
@@ -164,7 +155,7 @@ export const DirectorySection = memo(({ departments = [], selectedDept, deptStud
 
             // Simplified risk calculation if marks not fully available in this payload
             // Assuming API returns key stats or we default
-            const isAtRisk = showAtRisk ? (s.attendance < 75) : true;
+            const isAtRisk = true;
 
             return matchesSearch && matchesSem && isAtRisk;
         });
@@ -254,11 +245,7 @@ export const DirectorySection = memo(({ departments = [], selectedDept, deptStud
                             <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Total Students</p>
                             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>{filteredStudents.length}</p>
                         </div>
-                        <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.3)' }}></div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Avg Attendance</p>
-                            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>86%</p>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -284,17 +271,7 @@ export const DirectorySection = memo(({ departments = [], selectedDept, deptStud
                         />
                     </div>
 
-                    <button
-                        onClick={() => setShowAtRisk(!showAtRisk)}
-                        style={{
-                            padding: '0.5rem 1rem', borderRadius: '10px', border: showAtRisk ? '1px solid #ef4444' : '1px solid #e2e8f0',
-                            background: showAtRisk ? '#fef2f2' : 'white', color: showAtRisk ? '#ef4444' : '#64748b',
-                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <AlertTriangle size={16} /> {showAtRisk ? 'Showing At-Risk' : 'At-Risk Only'}
-                    </button>
+
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -360,7 +337,7 @@ export const DirectorySection = memo(({ departments = [], selectedDept, deptStud
                             <th>Reg No</th>
                             <th>Name</th>
                             <th>Sem</th>
-                            <th>Attendance</th>
+
                             <th>CIE Performance</th>
                             <th>Fees Status</th>
                             <th>Mentoring</th>
@@ -378,18 +355,9 @@ export const DirectorySection = memo(({ departments = [], selectedDept, deptStud
                                     <td>{student.rollNo}</td>
                                     <td style={{ fontWeight: 600 }}>
                                         {student.name}
-                                        {student.attendance < 75 && <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#ef4444', borderRadius: '50%', marginLeft: '6px', verticalAlign: 'middle' }}></span>}
                                     </td>
                                     <td>{student.sem}</td>
-                                    <td>
-                                        <span style={{
-                                            padding: '4px 8px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600,
-                                            background: student.attendance >= 75 ? '#dcfce7' : '#fee2e2',
-                                            color: student.attendance >= 75 ? '#166534' : '#991b1b'
-                                        }}>
-                                            {student.attendance}%
-                                        </span>
-                                    </td>
+
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <div style={{ width: '80px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>

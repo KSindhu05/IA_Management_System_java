@@ -13,7 +13,7 @@ const AcademicInsights = ({ realMarks }) => {
     const worstSubject = [...realMarks].sort((a, b) => a.totalScore - b.totalScore)[0];
 
     // 3. Attendance Alert
-    const lowAttSubject = realMarks.find(m => m.attendancePercentage < 75);
+    // 3. Attendance Alert Removed
 
     return (
         <div className={styles.insightsCard}>
@@ -47,26 +47,7 @@ const AcademicInsights = ({ realMarks }) => {
                     </div>
                 )}
 
-                {/* Attendance */}
-                {lowAttSubject ? (
-                    <div className={styles.insightItem}>
-                        <div className={styles.insightIndicator} style={{ background: 'var(--warning)' }}></div>
-                        <div className={styles.insightContent}>
-                            <h4>Attendance Alert</h4>
-                            <p>Your attendance in <strong>{lowAttSubject.subject.name}</strong> is {lowAttSubject.attendancePercentage}%. Please attend upcoming classes.</p>
-                        </div>
-                        <AlertIcon color="var(--warning)" />
-                    </div>
-                ) : (
-                    <div className={styles.insightItem}>
-                        <div className={styles.insightIndicator} style={{ background: 'var(--success)' }}></div>
-                        <div className={styles.insightContent}>
-                            <h4>Attendance Status</h4>
-                            <p>Great job! You have good attendance across all subjects.</p>
-                        </div>
-                        <CheckCircle size={18} color="var(--success)" />
-                    </div>
-                )}
+
             </div>
         </div>
     );

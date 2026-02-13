@@ -33,6 +33,14 @@ const User = sequelize.define('User', {
     },
     email: {
         type: DataTypes.STRING
+    },
+    semester: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    section: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
 }, {
     tableName: 'users',

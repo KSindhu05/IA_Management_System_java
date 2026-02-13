@@ -1,4 +1,4 @@
-const express = require('express');
+const express = require('express'); // Restarting server to register analytics routes
 const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
@@ -58,7 +58,7 @@ async function startServer() {
         console.log('✓ Database connection established');
 
         // Sync models (create tables if they don't exist)
-        await sequelize.sync({ alter: false }); // Disable alter to prevent startup error
+        await sequelize.sync({ alter: true }); // Enable alter to apply schema changes
         console.log('✓ Database models synchronized');
 
         // Start server

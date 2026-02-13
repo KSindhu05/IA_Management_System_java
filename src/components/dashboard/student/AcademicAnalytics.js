@@ -35,7 +35,6 @@ const AcademicAnalytics = ({ realMarks }) => {
     const subjectNames = realMarks.map(m => m.subject.name.substring(0, 15) + (m.subject.name.length > 15 ? '...' : '')); // Truncate for display
     const cie1Scores = realMarks.map(m => m.cie1Score || 0);
     const cie2Scores = realMarks.map(m => m.cie2Score || 0);
-    const attendanceData = realMarks.map(m => m.attendance || m.attendancePercentage || 0);
 
     // Chart Configuration
     const textColor = isDarkMode ? '#F8FAFC' : '#0F172A';
@@ -86,36 +85,10 @@ const AcademicAnalytics = ({ realMarks }) => {
 
     return (
         <div className={styles.analyticsGrid}>
-            <div className={styles.chartCard} style={{ animationDelay: '0.2s' }}>
+            <div className={styles.chartCard} style={{ animationDelay: '0.2s', width: '100%', gridColumn: '1 / -1' }}>
                 <h3 className={styles.cardTitle}>Performance Trend (CIE 1 vs CIE 2)</h3>
                 <div style={{ height: '300px' }}>
                     <Bar options={options} data={performanceData} />
-                </div>
-            </div>
-
-            {/* Attendance by Subject Chart */}
-            <div className={styles.chartCard} style={{ animationDelay: '0.3s' }}>
-                <h3 className={styles.cardTitle}>Attendance by Subject</h3>
-                <div style={{ height: '300px' }}>
-                    <Bar
-                        options={{
-                            ...options,
-                            plugins: { ...options.plugins, legend: { display: false } },
-                            scales: {
-                                ...options.scales,
-                                y: { ...options.scales.y, max: 100 }
-                            }
-                        }}
-                        data={{
-                            labels: subjects,
-                            datasets: [{
-                                label: 'Attendance %',
-                                data: attendanceData,
-                                backgroundColor: attendanceData.map(val => val < 75 ? 'rgba(239, 68, 68, 0.7)' : 'rgba(34, 197, 94, 0.7)'),
-                                borderRadius: 4,
-                            }]
-                        }}
-                    />
                 </div>
             </div>
         </div>

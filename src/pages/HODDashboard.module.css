@@ -354,6 +354,24 @@
     color: #111827;
 }
 
+.iconBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    border-radius: 6px;
+    padding: 0.5rem;
+    color: #64748b;
+}
+
+.iconBtn:hover {
+    background: #f1f5f9;
+    color: #2563eb;
+}
+
 .modalBody {
     padding: 1.5rem;
     max-height: 70vh;
