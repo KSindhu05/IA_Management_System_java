@@ -760,84 +760,91 @@ const FacultyDashboard = () => {
         return "-";
     };
 
-    const handleSave = async () => {
-        setSaving(true);
+    // Helper to prepare and save marks
+    const prepareAndSaveMarks = async () => {
+        const payload = [];
+        Object.keys(marks).forEach(studentId => {
+            const sMarks = marks[studentId];
+            ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(key => {
+                const val = sMarks[key];
+                if (val !== undefined) {
+                    let score = 0;
+                    if (val === 'Ab' || val === '') score = 0;
+                    else score = parseFloat(val);
+
+                    if (val === null || val === undefined) return;
+
+                    payload.push({
+                        studentId: parseInt(studentId),
+                        subjectId: selectedSubject.id,
+                        iaType: key.toUpperCase(), // cie1 -> CIE1
+                        co1: score,
+                        co2: 0
+                    });
+                }
+            });
+        });
+
+        if (payload.length === 0) return { success: true, message: 'No marks to save' };
+
         try {
             const token = user?.token;
-            const headers = {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            };
-
-            const payload = [];
-            Object.keys(marks).forEach(studentId => {
-                const sMarks = marks[studentId];
-                ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(key => {
-                    const val = sMarks[key];
-                    // Only send if it has a value (ignoring 'Ab' or empty string for now, or sending 0?)
-                    // If 'Ab', maybe send 0? existing logic 'Ab' => 0.
-                    // But payload expects Double.
-                    // If the user entered value, we send it.
-                    if (val !== undefined) {
-                        let score = 0;
-                        if (val === 'Ab' || val === '') score = 0;
-                        else score = parseFloat(val);
-
-                        // We should maybe only send if it's explicitly set? 
-                        // But for batch update, sending 0 is safer than not updating if it was previously set.
-                        // But we don't want to overwrite existing data with 0 if UI state is partial?
-                        // UI state `marks` is initialized with existing data in handleSubjectClick.
-                        // So it represents the COMPLETE desired state.
-                        // So sending everything is correct.
-
-                        // Skip if purely undefined/null
-                        if (val === null || val === undefined) return;
-
-                        payload.push({
-                            studentId: parseInt(studentId),
-                            subjectId: selectedSubject.id,
-                            iaType: key.toUpperCase(), // cie1 -> CIE1
-                            co1: score,
-                            co2: 0
-                        });
-                    }
-                });
-            });
-
-            if (payload.length === 0) {
-                showToast('No marks to save', 'info');
-                setSaving(false);
-                return;
-            }
-
+            const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
             const response = await fetch(`${API_BASE_URL}/marks/update/batch`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(payload)
             });
 
-            if (response.ok) {
-                showToast('Changes Committed & Locked!', 'success');
-                setIsLocked(true);
-            } else {
+            if (response.ok) return { success: true };
+            else {
                 const err = await response.text();
-                console.error(err);
-                showToast('Error saving marks: ' + err, 'error');
+                return { success: false, message: err };
             }
         } catch (e) {
             console.error(e);
-            showToast('Error saving marks', 'error');
-        } finally {
-            setSaving(false);
+            return { success: false, message: e.message };
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        const result = await prepareAndSaveMarks();
+        setSaving(false);
+
+        if (result.success) {
+            showToast('Changes Committed & Locked!', 'success');
+            setIsLocked(true);
+        } else {
+            showToast('Error saving marks: ' + result.message, 'error');
         }
     };
 
     const handleSubmitForApproval = async () => {
         // Prompt for CIE Type
-        const cieType = window.prompt("Enter Assessment Type to Submit (e.g., CIE1, CIE2, CIE3):", "CIE1");
-        if (!cieType) return;
+        const rawCieType = window.prompt("Enter Assessment Type to Submit (e.g., CIE1, CIE2, CIE3):", "CIE1");
+        if (!rawCieType) return;
+
+        // Normalize Input: remove spaces, hyphens and uppercase
+        const cieType = rawCieType.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+        // Validate
+        const validTypes = ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'];
+        if (!validTypes.includes(cieType)) {
+            showToast('Invalid CIE Type. Please enter CIE1, CIE2, CIE3, CIE4, or CIE5', 'error');
+            return;
+        }
 
         setSaving(true);
+
+        // AUTO-SAVE BEFORE SUBMITTING
+        const saveResult = await prepareAndSaveMarks();
+        if (!saveResult.success) {
+            showToast('Auto-save failed: ' + saveResult.message, 'error');
+            setSaving(false);
+            return;
+        }
+
         try {
             const token = user?.token;
             const headers = {
@@ -845,8 +852,7 @@ const FacultyDashboard = () => {
             };
 
             // Call Submit Endpoint
-            // Node.js backend expects query params: ?subjectId=...&cieType=...
-            const res = await fetch(`${API_BASE_URL}/marks/submit?subjectId=${selectedSubject.id}&cieType=${cieType.toUpperCase()}`, {
+            const res = await fetch(`${API_BASE_URL}/marks/submit?subjectId=${selectedSubject.id}&cieType=${cieType}`, {
                 method: 'POST',
                 headers
             });
