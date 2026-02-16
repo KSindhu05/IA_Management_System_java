@@ -1,0 +1,9 @@
+﻿id	username	full_name	role	department	subjects
+85	FAC001	Miss Manju Sree	FACULTY	CSE	Engineering Maths-II
+86	FAC002	Ramesh Gouda	FACULTY	CSE	CAEG
+87	FAC003	Wahida Banu	FACULTY	CSE	Python,Indian Constitution
+88	FAC004	Nasrin Banu	FACULTY	CSE	English Communication
+105	101	Prof. Test Faculty	FACULTY	CSE	Advanced Java,DBMS
+2	HOD001	MD Jaffar	HOD	CSE	NULL
+99	hod_cs	Test HOD CS	HOD	CS	NULL
+106	hod_cse	Head of CSE	HOD	CSE	NULL

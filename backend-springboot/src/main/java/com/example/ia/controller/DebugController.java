@@ -20,4 +20,13 @@ public class DebugController {
         User user = userRepository.findByUsername(username).orElse(null);
         return user != null ? user.getPassword() : "User not found";
     }
+
+    @GetMapping("/users")
+    public java.util.List<User> getAllUsers(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String role) {
+        if (role != null) {
+            return userRepository.findByRole(role.toUpperCase());
+        }
+        return userRepository.findAll();
+    }
 }

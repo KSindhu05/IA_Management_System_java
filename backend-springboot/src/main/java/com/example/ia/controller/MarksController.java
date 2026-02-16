@@ -51,7 +51,7 @@ public class MarksController {
     }
 
     @PostMapping("/update/batch")
-    @PreAuthorize("hasRole('FACULTY')")
+    @PreAuthorize("hasRole('FACULTY') or hasRole('HOD')")
     public ResponseEntity<?> updateBatchMarks(@RequestBody List<MarkUpdateDto> markDtos) {
         List<CieMark> marksToSave = new ArrayList<>();
 

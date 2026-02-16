@@ -1,0 +1,9 @@
+﻿id	name	department	instructor_name	semester
+5	Engineering Maths-II	CS	NULL	2
+6	English Communication	CS	NULL	2
+7	CAEG	CS	NULL	2
+8	Python	CS	NULL	2
+9	Indian Constitution	CS	NULL	2
+13	DBMS	CSE	Prof. Test Faculty	2
+14	Operating Systems	CSE	Prof. Other	2
+15	Software Engineering	CSE	Prof. Faculty One	2

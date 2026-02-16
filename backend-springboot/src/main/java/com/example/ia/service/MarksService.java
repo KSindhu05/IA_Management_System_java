@@ -96,7 +96,10 @@ public class MarksService {
         if (student == null) {
             return List.of();
         }
-        return cieMarkRepository.findByStudent_Id(student.getId());
+        return cieMarkRepository.findByStudent_Id(student.getId())
+                .stream()
+                .filter(m -> !"PENDING".equalsIgnoreCase(m.getStatus()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @Transactional(readOnly = true)

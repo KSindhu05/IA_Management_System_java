@@ -1138,8 +1138,8 @@ const FacultyDashboard = () => {
                             <span className={styles.statLabel}><Award size={14} /> Top Performers</span>
                         </div>
                     </div>
-                    <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <TrendingDown size={16} style={{ transform: 'rotate(180deg)' }} /> Average score improved by 5% vs IA-1
+                    <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: facultyClassAnalytics.avgScore >= 50 ? '#059669' : '#ca8a04', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {facultyClassAnalytics.avgScore >= 50 ? <TrendingDown size={16} style={{ transform: 'rotate(180deg)' }} /> : <AlertTriangle size={14} />} {facultyClassAnalytics.avgScore >= 50 ? 'Good performance — class average above 50%' : 'Class average needs improvement'}
                     </p>
                 </div>
             </div>
@@ -2464,7 +2464,7 @@ const FacultyDashboard = () => {
                                         <Search className={styles.searchIcon} size={18} />
                                         <input
                                             type="text"
-                                            placeholder="Search from 63 students in your department..."
+                                            placeholder="Search students in your department..."
                                             className={styles.searchInput}
                                             style={{ width: '100%' }}
                                             value={menteeSearchTerm}

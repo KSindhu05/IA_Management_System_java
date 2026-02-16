@@ -20,6 +20,15 @@ public class Subject {
 
     // User
     private String instructorName;
+    private Integer credits;
+
+    public Integer getCredits() {
+        return credits;
+    }
+
+    public void setCredits(Integer credits) {
+        this.credits = credits;
+    }
 
     public Long getId() {
         return id;

@@ -8,18 +8,20 @@ public class FacultyClassAnalytics {
     private double avgScore;
     private int lowPerformers;
     private int topPerformers;
+    private int totalStudents;
     private List<LowPerformer> lowPerformersList;
 
     public FacultyClassAnalytics() {
     }
 
     public FacultyClassAnalytics(int evaluated, int pending, double avgScore, int lowPerformers, int topPerformers,
-            List<LowPerformer> lowPerformersList) {
+            int totalStudents, List<LowPerformer> lowPerformersList) {
         this.evaluated = evaluated;
         this.pending = pending;
         this.avgScore = avgScore;
         this.lowPerformers = lowPerformers;
         this.topPerformers = topPerformers;
+        this.totalStudents = totalStudents;
         this.lowPerformersList = lowPerformersList;
     }
 
@@ -69,6 +71,14 @@ public class FacultyClassAnalytics {
 
     public void setLowPerformersList(List<LowPerformer> lowPerformersList) {
         this.lowPerformersList = lowPerformersList;
+    }
+
+    public int getTotalStudents() {
+        return totalStudents;
+    }
+
+    public void setTotalStudents(int totalStudents) {
+        this.totalStudents = totalStudents;
     }
 
     public static class LowPerformer {
