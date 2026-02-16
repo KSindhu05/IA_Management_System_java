@@ -102,6 +102,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const [scheduleForm, setScheduleForm] = useState({
         cieNumber: 1,
     });
+    const [editingScheduleId, setEditingScheduleId] = useState(null); // Track editing state
 
     // Pending Approvals State
     const [pendingApprovals, setPendingApprovals] = useState([]);
@@ -445,7 +446,44 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             }
         };
         fetchNotifications();
+        fetchNotifications();
     }, [user]);
+
+    const handleClearNotifications = async () => {
+        if (!window.confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/clear`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications([]);
+                setUnreadCount(0);
+                alert('Notifications cleared successfully');
+            } else {
+                alert('Failed to clear notifications');
+            }
+        } catch (e) {
+            console.error("Failed to clear notifications", e);
+            alert('Error clearing notifications');
+        }
+    };
+
+    const handleDeleteNotification = async (id) => {
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications(prev => prev.filter(n => n.id !== id));
+                // Recalculate unread count if needed
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            }
+        } catch (e) {
+            console.error("Failed to delete notification", e);
+        }
+    };
 
     // Fetch pending approvals when tab is active
     useEffect(() => {
@@ -653,24 +691,94 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
         data.cieNumber = scheduleForm.cieNumber;
+        data.senderId = user?.username; // Add senderId for robust auth handling
+
 
         try {
             const token = user?.token;
             const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
             const baseUrl = API_BASE.replace('/marks', '/hod');
 
-            const response = await fetch(`${API_BASE_URL}/cie/announcements?subjectId=${data.subjectId}`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(data)
-            });
+            let response;
+            if (editingScheduleId) {
+                // UPDATE Existing Schedule
+                response = await fetch(`${API_BASE_URL}/cie/announcements/${editingScheduleId}`, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify(data)
+                });
+            } else {
+                // CREATE New Schedule
+                response = await fetch(`${API_BASE_URL}/cie/announcements?subjectId=${data.subjectId}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(data)
+                });
+            }
 
             if (response.ok) {
-                alert('CIE Schedule Published Successfully!');
+                alert(editingScheduleId ? 'CIE Schedule Updated Successfully!' : 'CIE Schedule Published Successfully!');
                 setActiveTab('cie-schedule');
+                setEditingScheduleId(null); // Reset edit mode
                 window.location.reload();
             } else { alert('Failed to publish schedule'); }
         } catch (error) { console.error(error); alert('Error publishing schedule'); }
+    };
+
+    const handleEditSchedule = (schedule) => {
+        setEditingScheduleId(schedule.id);
+        setScheduleForm(prev => ({ ...prev, cieNumber: schedule.cieNumber }));
+
+        // Populate form fields (Need to access DOM or controlled inputs ideally, but simpler here for now)
+        // Since the form uses uncontrolled inputs with name attributes, we can try to key the form or use state.
+        // For now, let's just use state for the controlled parts and warn user they might need to re-enter if not fully controlled.
+        // BETTER APPROACH: Switch to fully controlled form or Key the form. 
+        // Let's use document.getElementsByName since it is quick for this refactor without rewriting entire form to controlled components.
+        setTimeout(() => {
+            const subjectSelect = document.querySelector('select[name="subjectId"]');
+            const dateInput = document.querySelector('input[name="scheduledDate"]');
+            const timeInput = document.querySelector('input[name="startTime"]');
+            const durationInput = document.querySelector('input[name="durationMinutes"]');
+            const roomInput = document.querySelector('input[name="examRoom"]');
+            const instructionsInput = document.querySelector('textarea[name="integrationInstructions"]');
+
+            if (subjectSelect) subjectSelect.value = schedule.subject?.id || '';
+            if (dateInput) dateInput.value = schedule.scheduledDate || '';
+            if (timeInput) timeInput.value = schedule.startTime || '';
+            if (durationInput) durationInput.value = schedule.durationMinutes || 60;
+            if (roomInput) roomInput.value = schedule.examRoom || '';
+            if (instructionsInput) instructionsInput.value = schedule.instructions || '';
+        }, 100);
+
+        // Scroll to form
+        document.querySelector('#scheduleFormSection')?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const handleDeleteSchedule = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this schedule? This cannot be undone.')) return;
+        try {
+            const token = user?.token;
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+            const response = await fetch(`${API_BASE_URL}/cie/announcements/${id}`, {
+                method: 'DELETE',
+                headers
+            });
+
+            if (response.ok) {
+                alert('Schedule deleted successfully');
+                setDepartmentAnnouncements(prev => prev.filter(a => a.id !== id));
+            } else {
+                alert('Failed to delete schedule');
+            }
+        } catch (e) {
+            console.error("Failed to delete schedule", e);
+            alert('Error deleting schedule');
+        }
+    };
+
+    const cancelEdit = () => {
+        setEditingScheduleId(null);
+        document.querySelector('form').reset();
     };
 
     useEffect(() => {
@@ -1032,7 +1140,12 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     // Extracted tab-rendering content into a reusable function
     const renderContent = () => (
         <>
-            {activeTab === 'announcements' && (<div className={styles.announcementContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Department IA Schedule</h3><div style={{ display: 'flex', gap: '10px' }}><button className={styles.secondaryBtn}><Calendar size={16} /> Sync to Calendar</button><button className={styles.quickBtn} style={{ background: '#fef3c7', color: '#d97706' }}><ShieldAlert size={16} /> Check Conflicts</button></div></div><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Subject</th><th>CIE Round</th><th>Faculty</th><th>Scheduled Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>{departmentAnnouncements.length > 0 ? departmentAnnouncements.map((ann, idx) => (<tr key={idx}><td style={{ fontWeight: 600 }}>{ann.subject?.name}</td><td><span className={styles.tag}>CIE-{ann.cieNumber}</span></td><td>{ann.faculty?.username}</td><td>{ann.scheduledDate}</td><td><span className={`${styles.statusBadge} ${styles.approved}`}>{ann.status || 'SCHEDULED'}</span></td><td><button className={styles.secondaryBtn} onClick={() => alert('Viewing details...')}>View</button></td></tr>)) : (<tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No announcements found.</td></tr>)}</tbody></table></div></div></div>)}
+            {activeTab === 'announcements' && (<div className={styles.announcementContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Department IA Schedule</h3><div style={{ display: 'flex', gap: '10px' }}><button className={styles.secondaryBtn}><Calendar size={16} /> Sync to Calendar</button><button className={styles.quickBtn} style={{ background: '#fef3c7', color: '#d97706' }}><ShieldAlert size={16} /> Check Conflicts</button></div></div><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Subject</th><th>CIE Round</th><th>Faculty</th><th>Scheduled Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>{departmentAnnouncements.length > 0 ? departmentAnnouncements.map((ann, idx) => (<tr key={idx}><td style={{ fontWeight: 600 }}>{ann.subject?.name}</td><td><span className={styles.tag}>CIE-{ann.cieNumber}</span></td><td>{ann.faculty?.username}</td><td>{ann.scheduledDate}</td><td><span className={`${styles.statusBadge} ${styles.approved}`}>{ann.status || 'SCHEDULED'}</span></td><td>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className={styles.iconBtn} onClick={() => handleEditSchedule(ann)} title="Edit" style={{ color: '#2563eb', background: '#dbeafe' }}><Edit size={16} /></button>
+                    <button className={styles.iconBtn} onClick={() => handleDeleteSchedule(ann.id)} title="Delete" style={{ color: '#dc2626', background: '#fee2e2' }}><Trash2 size={16} /></button>
+                </div>
+            </td></tr>)) : (<tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>No announcements found.</td></tr>)}</tbody></table></div></div></div>)}
             {activeTab === 'notifications' && (
                 <div className={styles.notificationsContainer} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                     <div className={styles.card}>
@@ -1081,16 +1194,35 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                         </div>
                     </div>
                     <div className={styles.card}>
-                        <h2 className={styles.cardTitle}>All Notifications</h2>
+                        <div className={styles.cardHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h2 className={styles.cardTitle} style={{ margin: 0 }}>All Notifications</h2>
+                            {notifications.length > 0 && (
+                                <button
+                                    className={styles.secondaryBtn}
+                                    onClick={handleClearNotifications}
+                                    style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2', display: 'flex', alignItems: 'center' }}
+                                >
+                                    <Trash2 size={14} style={{ marginRight: '4px' }} /> Clear All
+                                </button>
+                            )}
+                        </div>
                         <div className={styles.notificationsList}>
                             {notifications.length > 0 ? notifications.map(notif => (
-                                <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`}>
+                                <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`} style={{ position: 'relative' }}>
                                     <div className={styles.notifIcon}>{notif.type === 'INFO' ? <Bell size={20} /> : <AlertTriangle size={20} />}</div>
-                                    <div className={styles.notifContent}>
+                                    <div className={styles.notifContent} style={{ paddingRight: '20px' }}>
                                         <p className={styles.notifMessage}>{notif.message}</p>
                                         <span className={styles.notifTime}>{new Date(notif.createdAt).toLocaleString()}</span>
                                         {notif.category && <span className={styles.notifCategory}>{notif.category}</span>}
                                     </div>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteNotification(notif.id); }}
+                                        style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                        className={styles.deleteNotifBtn}
+                                        title="Delete"
+                                    >
+                                        <X size={14} />
+                                    </button>
                                 </div>
                             )) : (
                                 <div className={styles.emptyState}><Bell size={48} /><p>No notifications yet</p></div>
@@ -1179,7 +1311,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             {activeTab === 'approvals' && (<div className={styles.approvalsContainer}><div className={styles.infoBanner}><CheckCircle size={20} /><p>You have <strong>{pendingApprovals.length}</strong> IA Bundles pending for final approval.</p></div>{approvalLoading ? (<div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>Loading pending submissions...</div>) : pendingApprovals.length === 0 ? (<div style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}><CheckCircle size={48} style={{ marginBottom: '1rem', color: '#10b981' }} /><p>No pending submissions. All marks have been reviewed!</p></div>) : (pendingApprovals.map((approval, idx) => (<div key={idx} className={styles.approvalCard}><div className={styles.approvalHeader}><div><h4>{approval.subjectName}</h4><span>{approval.iaType} Marks | Faculty: {approval.facultyName} | {approval.studentCount} students</span></div><div className={styles.approvlActions}><button className={styles.rejectBtn} onClick={() => handleRejectMarks(approval.subjectId, approval.iaType)}>Reject</button><button className={styles.approveBtn} onClick={() => handleApproveMarks(approval.subjectId, approval.iaType)}>Approve & Lock</button></div></div><table className={styles.miniTable}><thead><tr><th>Reg No</th><th>Student</th><th>Marks</th></tr></thead><tbody>{(Array.isArray(approval.marks) ? (expandedApprovals[idx] ? approval.marks : approval.marks.slice(0, 3)) : []).map(st => (<tr key={st.studentId}><td>{st.regNo}</td><td>{st.studentName}</td><td>{st.totalScore}/50</td></tr>))}{Array.isArray(approval.marks) && approval.marks.length > 3 && (<tr onClick={() => toggleExpansion(idx)} style={{ cursor: 'pointer', background: '#f8fafc' }}><td colSpan="3" style={{ textAlign: 'center', color: '#2563eb', fontWeight: 500 }}>{expandedApprovals[idx] ? 'Show Less' : `+ ${approval.marks.length - 3} more records (Click to expand)`}</td></tr>)}</tbody></table></div>)))}<div className={styles.card} style={{ marginTop: '1.5rem' }}><div className={styles.cardHeader}><h3>🔓 Unlock Approved Marks</h3><p style={{ color: '#6b7280', fontSize: '0.9rem', marginTop: '0.5rem' }}>Unlock approved marks to allow faculty to make corrections</p></div><div style={{ padding: '1.5rem' }}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'end' }}><div><label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Subject</label><select className={styles.select} id="unlockSubject" style={{ width: '100%', padding: '0.6rem' }}><option value="">Select Subject</option>{subjects.filter(s => s.name !== 'IC').map(subject => (<option key={subject.id} value={subject.id}>{subject.name} - {subject.instructorName}</option>))}</select></div><div><label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>CIE Type</label><select className={styles.select} id="unlockCIE" style={{ width: '100%', padding: '0.6rem' }}><option value="CIE1">CIE-1</option><option value="CIE2">CIE-2</option><option value="CIE3">CIE-3</option><option value="CIE4">CIE-4</option><option value="CIE5">CIE-5</option></select></div><button className={styles.dangerBtn} onClick={() => { const subjectId = document.getElementById('unlockSubject').value; const cieType = document.getElementById('unlockCIE').value; if (!subjectId) { alert('Please select a subject'); return; } const subject = subjects.find(s => s.id === parseInt(subjectId)); handleUnlockMarks(subjectId, cieType, subject?.name || 'Selected Subject'); }} style={{ padding: '0.6rem 1.5rem' }}>Unlock Marks</button></div><div style={{ marginTop: '1rem', padding: '1rem', background: '#fef3c7', borderRadius: '0.5rem', fontSize: '0.85rem' }}><strong>⚠️ Warning:</strong> Unlocking marks will change their status from APPROVED to PENDING, allowing faculty to edit them again.</div></div></div></div>)}
             {activeTab === 'analytics' && (<div className={styles.analyticsContainer}><div className={styles.gridTwo}><div className={styles.card}><h3>IA Submission Status</h3><div className={styles.doughnutContainer}><Pie data={iaSubmissionStatus} options={doughnutOptions} /></div></div><div className={styles.card}><h3>Year-on-Year Improvement</h3><div className={styles.chartContainer}><Line data={hodTrendData} options={commonOptions} /></div></div></div><div className={styles.card} style={{ marginTop: '1.5rem' }}><h3>Download Reports</h3><div className={styles.downloadOptions}><button className={styles.downloadBtn}><FileText size={16} /> Department IA Report (PDF)</button><button className={styles.downloadBtn}><FileText size={16} /> Consolidated Marks Sheet (Excel)</button><button className={styles.downloadBtn}><FileText size={16} /> Low Performers List (CSV)</button></div></div></div>)}
             {activeTab === 'lesson-plans' && (<div className={styles.lessonPlansContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Department Syllabus Progress</h3></div><div className={styles.gridContainer} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(350px,1fr))', gap: '1.5rem', marginTop: '1rem' }}>{subjectsByDept[selectedDept]?.map((subName, idx) => { const subId = idx + 1; const realSub = subjects.find(s => s.name === subName); const idToUse = realSub ? realSub.id : subId; const savedTracker = localStorage.getItem('syllabusTracker'); const progress = savedTracker ? (JSON.parse(savedTracker)[idToUse] || {}) : {}; const savedStructure = localStorage.getItem('syllabusStructure'); const structure = savedStructure ? (JSON.parse(savedStructure)[idToUse] || []) : []; const savedCie = localStorage.getItem('cieSelector'); const cieSelector = savedCie ? (JSON.parse(savedCie)[idToUse] || {}) : {}; const units = structure.length > 0 ? structure : [{ id: 'u1', name: 'Unit 1: Introduction' }, { id: 'u2', name: 'Unit 2: Core Concepts' }, { id: 'u3', name: 'Unit 3: Advanced Topics' }, { id: 'u4', name: 'Unit 4: Application' }, { id: 'u5', name: 'Unit 5: Case Studies' }]; const completedCount = units.filter(u => progress[u.id]).length; const totalUnits = units.length; const percent = totalUnits > 0 ? Math.round((completedCount / totalUnits) * 100) : 0; return (<div key={idx} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '1.5rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}><div><h4 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem', color: '#111827' }}>{subName}</h4><span style={{ fontSize: '0.85rem', color: '#6b7280' }}>Faculty: {facultyWorkload[idx % facultyWorkload.length]?.name || 'Unknown'}</span></div><div style={{ textAlign: 'right' }}><span style={{ fontSize: '1.25rem', fontWeight: 'bold', color: percent === 100 ? '#10b981' : '#3b82f6' }}>{percent}%</span></div></div><div style={{ height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden', marginBottom: '1rem' }}><div style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.5s ease' }}></div></div><div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>{units.slice(0, 3).map(u => (<div key={u.id} style={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', color: progress[u.id] ? '#374151' : '#9ca3af' }}><div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid', borderColor: progress[u.id] ? '#10b981' : '#d1d5db', background: progress[u.id] ? '#10b981' : 'transparent', marginRight: '8px', display: 'grid', placeItems: 'center', flexShrink: 0 }}>{progress[u.id] && <CheckCircle size={10} color="white" />}</div><span style={{ textDecoration: progress[u.id] ? 'line-through' : 'none', marginRight: '8px' }}>{u.name}</span>{cieSelector[u.id] && (<span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#7c3aed', backgroundColor: '#f5f3ff', padding: '1px 6px', borderRadius: '4px', border: '1px solid #7c3aed', marginLeft: 'auto' }}>CIE</span>)}</div>))}{units.length > 3 && (<div style={{ fontSize: '0.8rem', color: '#6b7280', paddingLeft: '24px' }}>+ {units.length - 3} more topics</div>)}</div></div>); })}</div></div></div>)}
-            {activeTab === 'cie-schedule' && (<div className={styles.cieScheduleContainer}><div className={styles.gridTwo}><div className={styles.card}><h3>Schedule New CIE Exam</h3><form onSubmit={handleScheduleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}><div className={styles.formGroup}><label>Select Subject</label><select name="subjectId" required className={styles.deptSelect} style={{ width: '100%' }}><option value="">-- Choose Subject --</option>{subjects.map(sub => (<option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>))}</select></div><div className={styles.formGroup}><label>CIE Number</label><div style={{ display: 'flex', gap: '0.5rem' }}>{[1, 2, 3, 4, 5].map(num => (<label key={num} style={{ flex: 1, padding: '0.75rem', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: scheduleForm.cieNumber === num ? '#eff6ff' : 'white', borderColor: scheduleForm.cieNumber === num ? '#3b82f6' : '#cbd5e1', color: scheduleForm.cieNumber === num ? '#2563eb' : '#64748b', fontWeight: scheduleForm.cieNumber === num ? '600' : '400' }}><input type="radio" name="cieNumber" value={num} checked={scheduleForm.cieNumber === num} onChange={() => setScheduleForm({ ...scheduleForm, cieNumber: num })} style={{ display: 'none' }} />CIE-{num}</label>))}</div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className={styles.formGroup}><label>Date</label><input type="date" name="scheduledDate" required className={styles.input} /></div><div className={styles.formGroup}><label>Time</label><input type="time" name="startTime" required className={styles.input} /></div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className={styles.formGroup}><label>Duration (mins)</label><input type="number" name="durationMinutes" defaultValue="60" className={styles.input} /></div><div className={styles.formGroup}><label>Room / Hall</label><input name="examRoom" placeholder="e.g. LH-201" className={styles.input} /></div></div><div className={styles.formGroup}><label>Integration Instructions (Optional)</label><textarea name="instructions" placeholder="Special instructions for faculty/students..." className={styles.input} style={{ minHeight: '80px', resize: 'vertical' }}></textarea></div><button type="submit" className={styles.primaryBtn} style={{ marginTop: '0.5rem', justifyContent: 'center' }}><Megaphone size={18} /> Publish Schedule</button></form></div><div className={styles.card}><h3>Upcoming Scheduled Exams</h3><div className={styles.alertList}>{departmentAnnouncements.length > 0 ? departmentAnnouncements.map(ann => (<div key={ann.id} className={`${styles.alertItem} ${styles.info}`} style={{ alignItems: 'center' }}><div style={{ background: 'white', padding: '0.5rem', borderRadius: '8px', textAlign: 'center', minWidth: '60px' }}><span style={{ display: 'block', fontSize: '1.2rem', fontWeight: 'bold', color: '#2563eb' }}>{new Date(ann.scheduledDate).getDate()}</span><span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>{new Date(ann.scheduledDate).toLocaleString('default', { month: 'short' })}</span></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#1e293b' }}>{ann.subject ? ann.subject.name : 'Unknown Subject'} <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal' }}>({ann.subject?.code})</span></h4><span className={styles.statusBadge} style={{ background: '#dbeafe', color: '#1e40af' }}>CIE-{ann.cieNumber}</span></div><p style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: '#475569', fontSize: '0.85rem' }}><span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {ann.startTime || '10:00 AM'} ({ann.durationMinutes}m)</span>{ann.examRoom && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={12} /> {ann.examRoom}</span>}</p></div></div>)) : (<div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>No exams scheduled yet.</div>)}</div></div></div></div>)}
+            {activeTab === 'cie-schedule' && (<div className={styles.cieScheduleContainer}><div className={styles.gridTwo}><div className={styles.card}><h3>{editingScheduleId ? 'Edit CIE Exam Schedule' : 'Schedule New CIE Exam'}</h3><form onSubmit={handleScheduleSubmit} id="scheduleFormSection" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}><div className={styles.formGroup}><label>Select Subject</label><select name="subjectId" required className={styles.deptSelect} style={{ width: '100%' }}><option value="">-- Choose Subject --</option>{subjects.map(sub => (<option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>))}</select></div><div className={styles.formGroup}><label>CIE Number</label><div style={{ display: 'flex', gap: '0.5rem' }}>{[1, 2, 3, 4, 5].map(num => (<label key={num} style={{ flex: 1, padding: '0.75rem', border: '1px solid #cbd5e1', borderRadius: '8px', textAlign: 'center', cursor: 'pointer', background: scheduleForm.cieNumber === num ? '#eff6ff' : 'white', borderColor: scheduleForm.cieNumber === num ? '#3b82f6' : '#cbd5e1', color: scheduleForm.cieNumber === num ? '#2563eb' : '#64748b', fontWeight: scheduleForm.cieNumber === num ? '600' : '400' }}><input type="radio" name="cieNumber" value={num} checked={scheduleForm.cieNumber === num} onChange={() => setScheduleForm({ ...scheduleForm, cieNumber: num })} style={{ display: 'none' }} />CIE-{num}</label>))}</div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className={styles.formGroup}><label>Date</label><input type="date" name="scheduledDate" required className={styles.input} /></div><div className={styles.formGroup}><label>Time</label><input type="time" name="startTime" required className={styles.input} /></div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}><div className={styles.formGroup}><label>Duration (mins)</label><input type="number" name="durationMinutes" defaultValue="60" className={styles.input} /></div><div className={styles.formGroup}><label>Room / Hall</label><input name="examRoom" placeholder="e.g. LH-201" className={styles.input} /></div></div><div className={styles.formGroup}><label>Integration Instructions (Optional)</label><textarea name="instructions" placeholder="Special instructions for faculty/students..." className={styles.input} style={{ minHeight: '80px', resize: 'vertical' }}></textarea></div><div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>{editingScheduleId && (<button type="button" className={styles.secondaryBtn} onClick={cancelEdit} style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>)}<button type="submit" className={styles.primaryBtn} style={{ flex: 2, justifyContent: 'center' }}><Megaphone size={18} /> {editingScheduleId ? 'Update Schedule' : 'Publish Schedule'}</button></div></form></div><div className={styles.card}><h3>Upcoming Scheduled Exams</h3><div className={styles.alertList}>{departmentAnnouncements.length > 0 ? departmentAnnouncements.map(ann => (<div key={ann.id} className={`${styles.alertItem} ${styles.info}`} style={{ alignItems: 'center' }}><div style={{ background: 'white', padding: '0.5rem', borderRadius: '8px', textAlign: 'center', minWidth: '60px' }}><span style={{ display: 'block', fontSize: '1.2rem', fontWeight: 'bold', color: '#2563eb' }}>{new Date(ann.scheduledDate).getDate()}</span><span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>{new Date(ann.scheduledDate).toLocaleString('default', { month: 'short' })}</span></div><div style={{ flex: 1 }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#1e293b' }}>{ann.subject ? ann.subject.name : 'Unknown Subject'} <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal' }}>({ann.subject?.code})</span></h4><span className={styles.statusBadge} style={{ background: '#dbeafe', color: '#1e40af' }}>CIE-{ann.cieNumber}</span></div><p style={{ display: 'flex', gap: '1rem', alignItems: 'center', color: '#475569', fontSize: '0.85rem' }}><span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {ann.startTime || '10:00 AM'} ({ann.durationMinutes}m)</span>{ann.examRoom && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={12} /> {ann.examRoom}</span>}</p></div><div style={{ display: 'flex', gap: '8px' }}><button className={styles.iconBtn} onClick={() => handleEditSchedule(ann)} title="Edit" style={{ color: '#2563eb', background: '#dbeafe' }}><Edit size={16} /></button><button className={styles.iconBtn} onClick={() => handleDeleteSchedule(ann.id)} title="Delete" style={{ color: '#dc2626', background: '#fee2e2' }}><Trash2 size={16} /></button></div></div>)) : (<div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>No exams scheduled yet.</div>)}</div></div></div></div>)}
             {activeTab === 'reports' && (<div className={styles.sectionContainer}><h2 className={styles.sectionTitle}>Reports & Archives</h2><div className={styles.cardsGrid}><div className={styles.card}><div className={styles.cardHeader}><h3 className={styles.cardTitle}>IA Marks Report</h3></div><div style={{ padding: '1rem', color: '#666' }}><p>Download comprehensive PDF report of IA marks for all subjects in {selectedDept}.</p><button className={styles.primaryBtn} style={{ marginTop: '1rem', width: '100%', justifyContent: 'center' }} onClick={() => window.open(`${API_BASE_URL}/reports/marks/${selectedDept}/pdf`, '_blank')}><Download size={18} /> Download PDF</button></div></div></div></div>)}
         </>
     );

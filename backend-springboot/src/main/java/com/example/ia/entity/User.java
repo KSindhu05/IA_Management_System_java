@@ -57,7 +57,7 @@ public class User {
     }
 
     public String getFullName() {
-        return fullName;
+        return (fullName != null && !fullName.isEmpty()) ? fullName : username;
     }
 
     public void setFullName(String fullName) {

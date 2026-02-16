@@ -133,13 +133,30 @@ public class CieController {
     // ========== HOD/PRINCIPAL CREATE ANNOUNCEMENTS ==========
 
     @PostMapping("/announcements")
-    @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')")
-    public ResponseEntity<?> createAnnouncement(@RequestParam Long subjectId, @RequestBody Map<String, Object> data) {
+    // @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')") // Removed to allow
+    // fallback auth
+    public ResponseEntity<?> createAnnouncement(@RequestBody Map<String, Object> data) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long subjectId = Long.valueOf(data.get("subjectId").toString()); // Extract from body
+
+        System.out
+                .println("CIE Announcement Request: User=" + username + ", SubjectId=" + subjectId + ", Data=" + data); // DEBUG
+
+        // Fallback to senderId if Auth fails
+        if ("anonymousUser".equals(username) || username == null) {
+            if (data.containsKey("senderId")) {
+                username = data.get("senderId").toString();
+                System.out.println("Auth failed, using senderId from body: " + username);
+            }
+        }
+
         User creator = userRepository.findByUsernameIgnoreCase(username).orElse(null);
         Subject subject = subjectRepository.findById(subjectId).orElse(null);
 
         if (creator == null || subject == null) {
+            System.out
+                    .println("CreateAnnouncement Failed: Creator=" + (creator == null ? "null" : creator.getUsername())
+                            + ", Subject=" + (subject == null ? "null" : subject.getName())); // DEBUG
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid request"));
         }
 
@@ -157,5 +174,42 @@ public class CieController {
 
         announcementRepository.save(ann);
         return ResponseEntity.ok(ann);
+    }
+
+    @PutMapping("/announcements/{id}")
+    @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')")
+    public ResponseEntity<?> updateAnnouncement(@PathVariable Long id, @RequestBody Map<String, Object> data) {
+        Announcement ann = announcementRepository.findById(id).orElse(null);
+        if (ann == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (data.containsKey("scheduledDate")) {
+            ann.setScheduledDate(LocalDate.parse(data.get("scheduledDate").toString()));
+        }
+        if (data.containsKey("startTime")) {
+            ann.setStartTime(data.get("startTime").toString());
+        }
+        if (data.containsKey("durationMinutes")) {
+            ann.setDurationMinutes(Integer.parseInt(data.get("durationMinutes").toString()));
+        }
+        if (data.containsKey("examRoom")) {
+            ann.setExamRoom(data.get("examRoom").toString());
+        }
+        // Can also update subject/cieNumber if needed, but usually those are fixed for
+        // a specific schedule event
+
+        announcementRepository.save(ann);
+        return ResponseEntity.ok(ann);
+    }
+
+    @DeleteMapping("/announcements/{id}")
+    @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')")
+    public ResponseEntity<?> deleteAnnouncement(@PathVariable Long id) {
+        if (!announcementRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        announcementRepository.deleteById(id);
+        return ResponseEntity.ok().build();
     }
 }

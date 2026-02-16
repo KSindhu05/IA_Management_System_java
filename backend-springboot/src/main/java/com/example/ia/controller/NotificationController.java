@@ -75,4 +75,41 @@ public class NotificationController {
 
         return ResponseEntity.ok(Map.of("message", "Notification broadcast to " + targets.size() + " recipients"));
     }
+
+    @DeleteMapping("/clear")
+    @PreAuthorize("hasRole('STUDENT') or hasRole('FACULTY') or hasRole('HOD') or hasRole('PRINCIPAL')")
+    public ResponseEntity<?> clearNotifications() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsernameIgnoreCase(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "User not found"));
+        }
+
+        notificationRepository.deleteByUserId(user.getId());
+
+        return ResponseEntity.ok(Map.of("message", "Notifications cleared successfully"));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('STUDENT') or hasRole('FACULTY') or hasRole('HOD') or hasRole('PRINCIPAL')")
+    public ResponseEntity<?> deleteNotification(@PathVariable Long id) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsernameIgnoreCase(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "User not found"));
+        }
+
+        Notification notification = notificationRepository.findById(id).orElse(null);
+        if (notification == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Security check: Ensure user owns the notification
+        if (!notification.getUser().getId().equals(user.getId())) {
+            return ResponseEntity.status(403).body(Map.of("message", "You can only delete your own notifications"));
+        }
+
+        notificationRepository.delete(notification);
+        return ResponseEntity.ok(Map.of("message", "Notification deleted"));
+    }
 }

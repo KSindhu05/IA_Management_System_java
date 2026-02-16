@@ -11,7 +11,7 @@ public class Announcement {
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "subjectId")
+    @JoinColumn(name = "subject_id")
     private Subject subject;
 
     private String cieNumber;
@@ -22,7 +22,7 @@ public class Announcement {
     private String status; // SCHEDULED, COMPLETED
 
     @ManyToOne
-    @JoinColumn(name = "facultyId")
+    @JoinColumn(name = "faculty_id")
     private User faculty;
 
     public Announcement() {

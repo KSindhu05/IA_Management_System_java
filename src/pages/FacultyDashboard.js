@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import API_BASE_URL from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Edit, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell, MapPin } from 'lucide-react';
+import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Edit, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell, MapPin, Trash2 } from 'lucide-react';
 import { facultyData, facultyProfiles, facultySubjects, studentsList, labSchedule, getMenteesForFaculty } from '../utils/mockData';
 import styles from './FacultyDashboard.module.css';
 
@@ -432,7 +432,9 @@ const FacultyDashboard = () => {
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const result = await response.json();
+                const data = Array.isArray(result) ? result[0] : result; // Handle List response
+
                 if (data) {
                     setIaConfig(prev => ({
                         ...prev,
@@ -494,17 +496,20 @@ const FacultyDashboard = () => {
             });
 
             if (response.ok) {
-                const updatedAnn = await response.json(); // Assuming backend returns { message, announcement }
+                const updatedAnn = await response.json(); // Backend returns the Announcement object directly
 
                 // Update local state to reflect changes immediately
                 setPublishedSchedules(prev => {
-                    const existingIndex = prev.findIndex(s => s.id === updatedAnn.announcement.id);
+                    const ann = updatedAnn.announcement || updatedAnn; // Handle both wrapped and direct response (fallback)
+                    if (!ann || !ann.id) return prev;
+
+                    const existingIndex = prev.findIndex(s => s.id === ann.id);
                     if (existingIndex >= 0) {
                         const newScheds = [...prev];
-                        newScheds[existingIndex] = { ...newScheds[existingIndex], ...updatedAnn.announcement };
+                        newScheds[existingIndex] = { ...newScheds[existingIndex], ...ann };
                         return newScheds;
                     }
-                    return [...prev, updatedAnn.announcement];
+                    return [...prev, ann];
                 });
 
                 showToast(`Syllabus for CIE-${iaConfig.cieNumber} Updated!`, 'success');
@@ -2464,22 +2469,77 @@ const FacultyDashboard = () => {
         );
     };
 
+    // Clear Notifications Handler
+    const handleClearNotifications = async () => {
+        if (!window.confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/clear`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications([]);
+                setUnreadCount(0);
+                showToast('Notifications cleared successfully');
+            } else {
+                showToast('Failed to clear notifications', 'error');
+            }
+        } catch (e) {
+            console.error("Failed to clear notifications", e);
+            showToast('Error clearing notifications', 'error');
+        }
+    };
+
+    const handleDeleteNotification = async (id) => {
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications(prev => prev.filter(n => n.id !== id));
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            }
+        } catch (e) {
+            console.error("Failed to delete notification", e);
+        }
+    };
+
     // Render Notifications Section
     const renderNotifications = () => {
         return (
             <div className={styles.card}>
-                <h2 className={styles.cardTitle}>All Notifications</h2>
+                <div className={styles.cardHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2 className={styles.cardTitle} style={{ margin: 0 }}>All Notifications</h2>
+                    {notifications.length > 0 && (
+                        <button
+                            className={styles.secondaryBtn}
+                            onClick={handleClearNotifications}
+                            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2', display: 'flex', alignItems: 'center' }}
+                        >
+                            <Trash2 size={14} style={{ marginRight: '4px' }} /> Clear All
+                        </button>
+                    )}
+                </div>
                 <div className={styles.notificationsList}>
                     {notifications.length > 0 ? notifications.map(notif => (
-                        <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`}>
+                        <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`} style={{ position: 'relative' }}>
                             <div className={styles.notifIcon}>
                                 {notif.type === 'INFO' ? <Bell size={20} /> : <AlertCircle size={20} />}
                             </div>
-                            <div className={styles.notifContent}>
+                            <div className={styles.notifContent} style={{ paddingRight: '20px' }}>
                                 <p className={styles.notifMessage}>{notif.message}</p>
                                 <span className={styles.notifTime}>{new Date(notif.createdAt).toLocaleString()}</span>
                                 {notif.category && <span className={styles.notifCategory}>{notif.category}</span>}
                             </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteNotification(notif.id); }}
+                                style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                className={styles.deleteNotifBtn}
+                                title="Delete"
+                            >
+                                <X size={14} />
+                            </button>
                         </div>
                     )) : (
                         <div className={styles.emptyState}>

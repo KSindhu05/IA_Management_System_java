@@ -57,6 +57,17 @@ public class CieService {
         if (user == null)
             return List.of();
 
-        return announcementRepository.findByFaculty(user);
+        // 1. Find subjects assigned to this faculty (by name)
+        List<Subject> subjects = subjectRepository.findByInstructorName(user.getFullName());
+
+        // 2. Extract Subject IDs
+        List<Long> subjectIds = subjects.stream().map(Subject::getId).collect(Collectors.toList());
+
+        if (subjectIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 3. Find announcements for these subjects
+        return announcementRepository.findBySubjectIdIn(subjectIds);
     }
 }

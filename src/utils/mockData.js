@@ -1,6 +1,6 @@
 
 // Stub mockData.js to resolve imports during refactoring
-export const facultyData = [];
+export const facultyData = { id: 101, name: "Faculty Member", department: "CSE", email: "faculty@example.com" };
 export const facultyProfiles = [];
 export const facultySubjects = [];
 export const studentsList = [];
