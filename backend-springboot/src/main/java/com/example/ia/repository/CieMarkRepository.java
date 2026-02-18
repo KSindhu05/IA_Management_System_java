@@ -2,7 +2,10 @@ package com.example.ia.repository;
 
 import com.example.ia.entity.CieMark;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,4 +21,16 @@ public interface CieMarkRepository extends JpaRepository<CieMark, Long> {
 
     // For HOD pending approvals
     List<CieMark> findByStatusAndSubject_Department(String status, String department);
+
+    // Cleanup: delete zero-value marks that were erroneously submitted/approved
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM CieMark c WHERE (c.marks = 0 OR c.marks IS NULL) AND c.status IN ('SUBMITTED', 'APPROVED')")
+    void deleteZeroValueSubmittedMarks();
+
+    // Fix: convert 0-value PENDING marks to null (keeps record for unlock tracking)
+    @Modifying
+    @Transactional
+    @Query("UPDATE CieMark c SET c.marks = NULL WHERE c.marks = 0 AND c.status = 'PENDING'")
+    void nullifyZeroPendingMarks();
 }

@@ -27,10 +27,12 @@ public class MarksService {
     @Transactional
     public void submitMarks(Long subjectId, String cieType, String facultyUsername) {
         // Find all marks for this subject and CIE type and update status to SUBMITTED
-        // In a real app, strict validation against faculty assignment would be here
+        // Only submit marks that have been entered (marks != null)
+        // 0 is valid (faculty may give 0), but null means not yet entered
         List<CieMark> marks = cieMarkRepository.findBySubject_Id(subjectId);
         marks.forEach(mark -> {
-            if (mark.getCieType().equals(cieType)) {
+            if (mark.getCieType().equals(cieType)
+                    && mark.getMarks() != null) {
                 mark.setStatus("SUBMITTED");
             }
         });
@@ -114,7 +116,7 @@ public class MarksService {
         // Get all students who already have marks for this CIE type
         java.util.Set<Long> studentsWithMarks = new java.util.HashSet<>();
 
-        // Update existing marks to PENDING
+        // Update existing marks to PENDING so faculty can edit them
         marks.forEach(mark -> {
             if (mark.getCieType().equals(cieType)) {
                 mark.setStatus("PENDING");
@@ -126,7 +128,8 @@ public class MarksService {
         cieMarkRepository.saveAll(marks);
 
         // For CIE types that don't have records yet (e.g. CIE-2 to CIE-5),
-        // create PENDING records for all students who have CIE-1 marks for this subject
+        // create PENDING placeholders with NULL marks (not 0) so the frontend
+        // knows these CIE types are unlocked for editing
         java.util.Set<Long> allStudentIds = new java.util.HashSet<>();
         marks.forEach(mark -> {
             if (mark.getStudent() != null) {
@@ -138,14 +141,13 @@ public class MarksService {
         if (subject != null) {
             for (Long studentId : allStudentIds) {
                 if (!studentsWithMarks.contains(studentId)) {
-                    // Create new PENDING record for this student + CIE type
                     Student student = studentRepository.findById(studentId).orElse(null);
                     if (student != null) {
                         CieMark newMark = new CieMark();
                         newMark.setStudent(student);
                         newMark.setSubject(subject);
                         newMark.setCieType(cieType);
-                        newMark.setMarks(0.0);
+                        newMark.setMarks(null); // NULL not 0 — won't display as "0"
                         newMark.setStatus("PENDING");
                         cieMarkRepository.save(newMark);
                     }

@@ -24,6 +24,11 @@ public class DataInitializer {
         return args -> {
             String defaultPassword = "password";
 
+            // CLEANUP: Delete zero-value marks that were erroneously submitted/approved
+            cieMarkRepository.deleteZeroValueSubmittedMarks();
+            // FIX: Convert any existing 0-value PENDING marks to null (display fix)
+            cieMarkRepository.nullifyZeroPendingMarks();
+            System.out.println("✅ Cleaned up zero-value marks");
             // CLEANUP: Remove Advanced Java if it exists
             subjectRepository.findByName("Advanced Java").ifPresent(subject -> {
                 java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository

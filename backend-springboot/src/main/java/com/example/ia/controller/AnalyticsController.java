@@ -37,10 +37,14 @@ public class AnalyticsController {
         int passCount = 0;
         int failCount = 0;
 
+        // Track per-student totals for at-risk calculation
+        Map<Long, List<Double>> studentMarksMap = new HashMap<>();
+
         for (Subject sub : subjects) {
             List<CieMark> marks = cieMarkRepository.findBySubject_Id(sub.getId());
             for (CieMark mark : marks) {
-                if (mark.getMarks() != null) {
+                // Skip PENDING marks with 0 score (not yet entered)
+                if (mark.getMarks() != null && !(mark.getMarks() == 0 && "PENDING".equals(mark.getStatus()))) {
                     totalScore += mark.getMarks();
                     totalCount++;
                     if (mark.getMarks() >= 20) { // Pass threshold 20/50
@@ -48,12 +52,27 @@ public class AnalyticsController {
                     } else {
                         failCount++;
                     }
+                    // Track per-student for at-risk
+                    if (mark.getStudent() != null) {
+                        studentMarksMap
+                                .computeIfAbsent(mark.getStudent().getId(), k -> new ArrayList<>())
+                                .add(mark.getMarks());
+                    }
                 }
             }
         }
 
         double deptAverage = totalCount > 0 ? totalScore / totalCount : 0;
         double passPercentage = totalCount > 0 ? (passCount * 100.0 / totalCount) : 0;
+
+        // Calculate at-risk students (avg marks < 20)
+        int atRiskCount = 0;
+        for (List<Double> marksList : studentMarksMap.values()) {
+            double avg = marksList.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            if (avg < 20) {
+                atRiskCount++;
+            }
+        }
 
         // Build per-subject stats
         List<Map<String, Object>> subjectStats = new ArrayList<>();
@@ -63,7 +82,7 @@ public class AnalyticsController {
             int subCount = 0;
             int subPass = 0;
             for (CieMark mark : marks) {
-                if (mark.getMarks() != null) {
+                if (mark.getMarks() != null && !(mark.getMarks() == 0 && "PENDING".equals(mark.getStatus()))) {
                     subTotal += mark.getMarks();
                     subCount++;
                     if (mark.getMarks() >= 20)
@@ -73,8 +92,8 @@ public class AnalyticsController {
             Map<String, Object> stat = new HashMap<>();
             stat.put("subjectName", sub.getName());
             stat.put("subjectId", sub.getId());
-            stat.put("average", subCount > 0 ? subTotal / subCount : 0);
-            stat.put("passPercentage", subCount > 0 ? (subPass * 100.0 / subCount) : 0);
+            stat.put("average", subCount > 0 ? Math.round((subTotal / subCount) * 100.0) / 100.0 : 0);
+            stat.put("passPercentage", subCount > 0 ? Math.round((subPass * 100.0 / subCount) * 100.0) / 100.0 : 0);
             stat.put("totalStudents", subCount);
             subjectStats.add(stat);
         }
@@ -82,10 +101,11 @@ public class AnalyticsController {
         Map<String, Object> result = new HashMap<>();
         result.put("totalStudents", students.size());
         result.put("totalSubjects", subjects.size());
-        result.put("deptAverage", Math.round(deptAverage * 100.0) / 100.0);
+        result.put("average", Math.round(deptAverage * 100.0) / 100.0); // Frontend reads 'average'
         result.put("passPercentage", Math.round(passPercentage * 100.0) / 100.0);
         result.put("passCount", passCount);
         result.put("failCount", failCount);
+        result.put("atRiskCount", atRiskCount); // Frontend reads 'atRiskCount'
         result.put("subjectStats", subjectStats);
 
         return result;

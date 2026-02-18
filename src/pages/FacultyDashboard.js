@@ -25,6 +25,7 @@ const FacultyDashboard = () => {
     const [isLocked, setIsLocked] = useState(false); // For Commit/Edit workflow
     const [cieLockStatus, setCieLockStatus] = useState({ cie1: true, cie2: true, cie3: true, cie4: true, cie5: true }); // Per-CIE lock
     const [saving, setSaving] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -684,9 +685,11 @@ const FacultyDashboard = () => {
                         const key = rawType ? rawType.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : null;
 
                         if (key && newMarks[sId]) {
-                            // Use marks value, treat 0 as empty for display if PENDING
-                            // Robust check for 0 marks (don't treat 0 as false)
-                            const markVal = (m.marks === 0 || m.marks === null) && (m.status === 'PENDING' || !m.status) ? '' : (m.marks !== null ? m.marks : '');
+                            // Display logic: null/undefined = not entered (show empty)
+                            // 0 = faculty entered zero (show '0')
+                            const isNotEntered = m.marks === null || m.marks === undefined;
+                            const isPending = m.status === 'PENDING' || !m.status;
+                            const markVal = (isNotEntered && isPending) ? '' : (m.marks !== null && m.marks !== undefined ? m.marks : '');
                             newMarks[sId][key] = markVal;
                         }
 
@@ -826,21 +829,23 @@ const FacultyDashboard = () => {
             const sMarks = marks[studentId];
             ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(key => {
                 const val = sMarks[key];
-                if (val !== undefined) {
-                    let score = 0;
-                    if (val === 'Ab' || val === '') score = 0;
-                    else score = parseFloat(val);
+                // Only skip truly empty values (undefined, null, empty string)
+                // Allow 0 — faculty may intentionally enter 0 marks
+                if (val === undefined || val === null || val === '') return;
 
-                    if (val === null || val === undefined) return;
+                let score = 0;
+                if (val === 'Ab') score = 0;
+                else score = parseFloat(val);
 
-                    payload.push({
-                        studentId: parseInt(studentId),
-                        subjectId: selectedSubject.id,
-                        iaType: key.toUpperCase(), // cie1 -> CIE1
-                        co1: score,
-                        co2: 0
-                    });
-                }
+                if (isNaN(score) && val !== 'Ab') return;
+
+                payload.push({
+                    studentId: parseInt(studentId),
+                    subjectId: selectedSubject.id,
+                    iaType: key.toUpperCase(),
+                    co1: score,
+                    co2: 0
+                });
             });
         });
 
@@ -872,8 +877,8 @@ const FacultyDashboard = () => {
         setSaving(false);
 
         if (result.success) {
-            showToast('Changes Committed & Locked!', 'success');
-            setIsLocked(true);
+            showToast('Draft saved successfully! (Not yet submitted to HOD)', 'success');
+            // Do NOT lock — this is just a draft save, not a submission
         } else {
             showToast('Error saving marks: ' + result.message, 'error');
         }
@@ -961,10 +966,76 @@ const FacultyDashboard = () => {
 
 
     const togglePreview = () => {
-        showToast('Preview Mode: Showing Final Report View', 'info');
-        // In a real app, this might open a modal or new route. 
-        // For now, we utilize the download report as the "final output" check
-        downloadCSV();
+        setShowPreview(!showPreview);
+    };
+
+    const renderPreviewModal = () => {
+        if (!showPreview || !selectedSubject) return null;
+        const subjectStudents = students
+            .filter(s => selectedSubject && s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        return (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowPreview(false)}>
+                <div style={{ background: 'white', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '1000px', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '2px solid #e5e7eb', paddingBottom: '1rem' }}>
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#111827' }}>📋 CIE Marks Report Preview</h2>
+                            <p style={{ margin: '0.3rem 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{selectedSubject.name} ({selectedSubject.code}) — {selectedSubject.semester} Sem</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => { window.print(); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>🖨️ Print</button>
+                            <button onClick={() => setShowPreview(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>✕ Close</button>
+                        </div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Sl</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Reg No</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Student Name</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-1</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-2</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-3</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-4</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-5</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '700' }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {subjectStudents.map((student, index) => {
+                                const sMarks = marks[student.id] || {};
+                                const ia1Mark = sMarks['CIE1'] || {};
+                                const v1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '-');
+                                const v2 = sMarks.cie2 !== undefined ? sMarks.cie2 : (ia1Mark.cie2Score != null ? ia1Mark.cie2Score : '-');
+                                const v3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '-';
+                                const v4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '-';
+                                const v5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '-';
+                                const total = [v1, v2, v3, v4, v5].reduce((sum, v) => sum + (v !== '-' && v !== '' && v !== 'Ab' ? (Number(v) || 0) : 0), 0);
+                                const hasAny = [v1, v2, v3, v4, v5].some(v => v !== '-' && v !== '');
+                                const cellStyle = (v) => ({ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', color: v === '-' || v === '' ? '#9ca3af' : '#111827', fontWeight: v !== '-' && v !== '' ? '500' : '400' });
+                                return (
+                                    <tr key={student.id} style={{ background: index % 2 === 0 ? 'white' : '#f9fafb' }}>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{index + 1}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace', fontSize: '0.8rem' }}>{student.rollNo || student.regNo}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontWeight: '500' }}>{student.name}</td>
+                                        <td style={cellStyle(v1)}>{v1}</td>
+                                        <td style={cellStyle(v2)}>{v2}</td>
+                                        <td style={cellStyle(v3)}>{v3}</td>
+                                        <td style={cellStyle(v4)}>{v4}</td>
+                                        <td style={cellStyle(v5)}>{v5}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: hasAny ? '#111827' : '#9ca3af' }}>{hasAny ? total : '-'}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: '#f0fdf4', borderRadius: '8px', fontSize: '0.85rem', color: '#166534' }}>
+                        📊 Total Students: {subjectStudents.length} | Subject: {selectedSubject.name} | Max per CIE: 50 | Total Max: 250
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     // --- NEW FEATURE: EXPORT CSV ---
@@ -2570,6 +2641,7 @@ const FacultyDashboard = () => {
             }
             {activeSection === 'My Students' && renderMyStudents()}
             {activeSection === 'CIE Entry' && renderCIEEntry()}
+            {renderPreviewModal()}
 
             {activeSection === 'Lesson Plan' && renderLessonPlan()}
             {activeSection === 'CIE Schedule' && renderCIESchedule()}

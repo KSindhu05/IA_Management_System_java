@@ -30,19 +30,206 @@ public class HodController {
     @Autowired
     PasswordEncoder passwordEncoder;
 
+    @Autowired
+    com.example.ia.repository.CieMarkRepository cieMarkRepository;
+
     @GetMapping("/overview")
     @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')")
     public ResponseEntity<?> getOverview(@RequestParam String department) {
-        long totalStudents = studentRepository.countByDepartment(department);
+        List<com.example.ia.entity.Student> students = studentRepository.findByDepartment(department);
+        List<com.example.ia.entity.Subject> subjects = subjectRepository.findByDepartment(department);
         long facultyCount = userRepository.countByRoleAndDepartment("FACULTY", department);
 
-        // Calculate dept average from marks if available
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("totalStudents", totalStudents);
-        stats.put("facultyCount", facultyCount);
+        // Collect all marks for all subjects in the department
+        java.util.List<com.example.ia.entity.CieMark> allMarks = new java.util.ArrayList<>();
+        for (com.example.ia.entity.Subject sub : subjects) {
+            allMarks.addAll(cieMarkRepository.findBySubject_Id(sub.getId()));
+        }
 
+        // Filter out PENDING zero marks
+        java.util.List<com.example.ia.entity.CieMark> validMarks = allMarks.stream()
+                .filter(m -> m.getMarks() != null && !(m.getMarks() == 0 && "PENDING".equals(m.getStatus())))
+                .collect(java.util.stream.Collectors.toList());
+
+        // === 1. CIE Trend (average per CIE round across all subjects) ===
+        Map<String, double[]> cieSums = new HashMap<>(); // {total, count}
+        for (String cie : new String[] { "CIE1", "CIE2", "CIE3", "CIE4", "CIE5" }) {
+            cieSums.put(cie, new double[] { 0, 0 });
+        }
+        for (com.example.ia.entity.CieMark m : validMarks) {
+            String type = m.getCieType() != null ? m.getCieType().toUpperCase() : "";
+            String target = null;
+            if (cieSums.containsKey(type))
+                target = type;
+            else if (type.contains("1"))
+                target = "CIE1";
+            else if (type.contains("2"))
+                target = "CIE2";
+            else if (type.contains("3"))
+                target = "CIE3";
+            else if (type.contains("4"))
+                target = "CIE4";
+            else if (type.contains("5"))
+                target = "CIE5";
+            if (target != null) {
+                cieSums.get(target)[0] += m.getMarks();
+                cieSums.get(target)[1]++;
+            }
+        }
+        Map<String, Object> cieTrend = new HashMap<>();
+        for (String cie : new String[] { "CIE1", "CIE2", "CIE3", "CIE4", "CIE5" }) {
+            double[] arr = cieSums.get(cie);
+            cieTrend.put(cie, arr[1] > 0 ? Math.round((arr[0] / arr[1]) * 10.0) / 10.0 : 0);
+        }
+
+        // === 2. Grade Distribution ===
+        int gradeA = 0, gradeB = 0, gradeC = 0, gradeD = 0, gradeF = 0;
+        for (com.example.ia.entity.CieMark m : validMarks) {
+            double percent = (m.getMarks() / 50.0) * 100;
+            if (percent >= 80)
+                gradeA++;
+            else if (percent >= 60)
+                gradeB++;
+            else if (percent >= 40)
+                gradeC++;
+            else if (percent >= 20)
+                gradeD++;
+            else
+                gradeF++;
+        }
+        Map<String, Object> gradeDistribution = new HashMap<>();
+        gradeDistribution.put("labels",
+                new String[] { "A (80%+)", "B (60-79%)", "C (40-59%)", "D (20-39%)", "F (<20%)" });
+        gradeDistribution.put("data", new int[] { gradeA, gradeB, gradeC, gradeD, gradeF });
+
+        // === 3. Subject-wise Performance with CIE breakdown ===
+        java.util.List<Map<String, Object>> subjectPerfList = new java.util.ArrayList<>();
+        for (com.example.ia.entity.Subject sub : subjects) {
+            java.util.List<com.example.ia.entity.CieMark> sMarks = validMarks.stream()
+                    .filter(m -> m.getSubject() != null && m.getSubject().getId().equals(sub.getId()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            // Per-CIE averages
+            Map<String, Object> averages = new HashMap<>();
+            double grandTotal = 0;
+            int grandCount = 0;
+            int passCount = 0;
+            int totalCount = 0;
+
+            for (String cie : new String[] { "CIE1", "CIE2", "CIE3", "CIE4", "CIE5" }) {
+                final String cieKey = cie;
+                java.util.List<com.example.ia.entity.CieMark> cieMarks = sMarks.stream()
+                        .filter(m -> {
+                            String t = m.getCieType() != null ? m.getCieType().toUpperCase() : "";
+                            return t.equals(cieKey) || (t.contains(cieKey.substring(3)));
+                        })
+                        .collect(java.util.stream.Collectors.toList());
+                double cieTotal = cieMarks.stream().mapToDouble(m -> m.getMarks()).sum();
+                int cieCount = cieMarks.size();
+                double cieAvg = cieCount > 0 ? Math.round((cieTotal / cieCount) * 10.0) / 10.0 : 0;
+                averages.put(cie, cieAvg);
+                if (cieAvg > 0) {
+                    grandTotal += cieAvg;
+                    grandCount++;
+                }
+
+                for (com.example.ia.entity.CieMark cm : cieMarks) {
+                    totalCount++;
+                    if (cm.getMarks() >= 20)
+                        passCount++;
+                }
+            }
+
+            double overall = grandCount > 0 ? Math.round((grandTotal / grandCount) * 10.0) / 10.0 : 0;
+            double passRate = totalCount > 0 ? Math.round((passCount * 100.0 / totalCount) * 10.0) / 10.0 : 0;
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", sub.getId());
+            item.put("name", sub.getName());
+            item.put("averages", averages);
+            item.put("overall", overall);
+            item.put("passRate", Math.min(100, passRate));
+            subjectPerfList.add(item);
+        }
+
+        // === 4. At-risk students (avg marks < 20) ===
+        Map<Long, java.util.List<Double>> studentMarksMap = new HashMap<>();
+        Map<Long, com.example.ia.entity.Student> studentObjMap = new HashMap<>();
+        for (com.example.ia.entity.CieMark m : validMarks) {
+            if (m.getStudent() != null) {
+                Long sid = m.getStudent().getId();
+                studentMarksMap.computeIfAbsent(sid, k -> new java.util.ArrayList<>()).add(m.getMarks());
+                studentObjMap.putIfAbsent(sid, m.getStudent());
+            }
+        }
+        java.util.List<Map<String, Object>> atRiskStudentsList = new java.util.ArrayList<>();
+        for (Map.Entry<Long, java.util.List<Double>> entry : studentMarksMap.entrySet()) {
+            double avg = entry.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            if (avg < 20) {
+                com.example.ia.entity.Student s = studentObjMap.get(entry.getKey());
+                if (s != null) {
+                    Map<String, Object> risk = new HashMap<>();
+                    risk.put("id", s.getId());
+                    risk.put("rollNo", s.getRegNo());
+                    risk.put("name", s.getName());
+                    risk.put("avgMarks", Math.round(avg * 10.0) / 10.0);
+                    risk.put("issue", avg < 10 ? "Critical - Very Low Marks" : "Below Pass Threshold");
+                    atRiskStudentsList.add(risk);
+                }
+            }
+        }
+
+        // === 5. Alerts ===
+        java.util.List<Map<String, Object>> alerts = new java.util.ArrayList<>();
+        int alertId = 1;
+        if (atRiskStudentsList.size() > 0) {
+            Map<String, Object> alert = new HashMap<>();
+            alert.put("id", alertId++);
+            alert.put("type", "critical");
+            alert.put("message", atRiskStudentsList.size() + " students are at risk with below-threshold marks");
+            alert.put("date", java.time.LocalDate.now().toString());
+            alerts.add(alert);
+        }
+        // Check for subjects with poor overall performance
+        for (Map<String, Object> sp : subjectPerfList) {
+            double overall = ((Number) sp.get("overall")).doubleValue();
+            if (overall > 0 && overall < 25) {
+                Map<String, Object> alert = new HashMap<>();
+                alert.put("id", alertId++);
+                alert.put("type", "warning");
+                alert.put("message", sp.get("name") + " has low class average (" + overall + "/50)");
+                alert.put("date", java.time.LocalDate.now().toString());
+                alerts.add(alert);
+            }
+        }
+        // Pending submissions
+        long pendingCount = allMarks.stream().filter(m -> "PENDING".equals(m.getStatus())).count();
+        if (pendingCount > 0) {
+            Map<String, Object> alert = new HashMap<>();
+            alert.put("id", alertId++);
+            alert.put("type", "info");
+            alert.put("message", pendingCount + " mark entries are still pending review");
+            alert.put("date", java.time.LocalDate.now().toString());
+            alerts.add(alert);
+        }
+        if (alerts.isEmpty()) {
+            Map<String, Object> alert = new HashMap<>();
+            alert.put("id", 1);
+            alert.put("type", "info");
+            alert.put("message", "All department metrics are within acceptable range");
+            alert.put("date", java.time.LocalDate.now().toString());
+            alerts.add(alert);
+        }
+
+        // === Build response ===
         Map<String, Object> data = new HashMap<>();
-        data.put("stats", stats);
+        data.put("totalStudents", students.size());
+        data.put("facultyCount", facultyCount);
+        data.put("cieTrend", cieTrend);
+        data.put("subjectPerfList", subjectPerfList);
+        data.put("gradeDistribution", gradeDistribution);
+        data.put("alerts", alerts);
+        data.put("atRiskStudents", atRiskStudentsList);
         return ResponseEntity.ok(data);
     }
 
