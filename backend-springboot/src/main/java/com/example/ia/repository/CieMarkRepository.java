@@ -23,14 +23,14 @@ public interface CieMarkRepository extends JpaRepository<CieMark, Long> {
     List<CieMark> findByStatusAndSubject_Department(String status, String department);
 
     // Cleanup: delete zero-value marks that were erroneously submitted/approved
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("DELETE FROM CieMark c WHERE (c.marks = 0 OR c.marks IS NULL) AND c.status IN ('SUBMITTED', 'APPROVED')")
+    @Query("DELETE FROM CieMark c WHERE (c.marks = 0.0 OR c.marks IS NULL) AND c.status IN ('SUBMITTED', 'APPROVED')")
     void deleteZeroValueSubmittedMarks();
 
     // Fix: convert 0-value PENDING marks to null (keeps record for unlock tracking)
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE CieMark c SET c.marks = NULL WHERE c.marks = 0 AND c.status = 'PENDING'")
+    @Query("UPDATE CieMark c SET c.marks = NULL WHERE c.marks = 0.0 AND (c.status = 'PENDING' OR c.status IS NULL)")
     void nullifyZeroPendingMarks();
 }

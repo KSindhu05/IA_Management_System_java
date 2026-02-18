@@ -24,11 +24,26 @@ public class DataInitializer {
         return args -> {
             String defaultPassword = "password";
 
-            // CLEANUP: Delete zero-value marks that were erroneously submitted/approved
-            cieMarkRepository.deleteZeroValueSubmittedMarks();
-            // FIX: Convert any existing 0-value PENDING marks to null (display fix)
-            cieMarkRepository.nullifyZeroPendingMarks();
-            System.out.println("✅ Cleaned up zero-value marks");
+            // MANUAL JAVA CLEANUP to ensure it runs regardless of JPQL quirks
+            java.util.List<com.example.ia.entity.CieMark> allMarks = cieMarkRepository.findAll();
+            int fixedCount = 0;
+            for (com.example.ia.entity.CieMark m : allMarks) {
+                // Check if mark is 0.0 (or close to it) and PENDING or null status
+                if (m.getMarks() != null && Math.abs(m.getMarks()) < 0.001
+                        && (m.getStatus() == null || "PENDING".equals(m.getStatus()))) {
+                    m.setMarks(null);
+                    cieMarkRepository.save(m);
+                    fixedCount++;
+                }
+                // Also clean up erroneously SUBMITTED 0 marks
+                if (m.getMarks() != null && Math.abs(m.getMarks()) < 0.001
+                        && ("SUBMITTED".equals(m.getStatus()) || "APPROVED".equals(m.getStatus()))) {
+                    cieMarkRepository.delete(m);
+                    fixedCount++;
+                }
+            }
+            System.out.println("✅ JAVA CLEANUP: Fixed/Deleted " + fixedCount + " zero-value marks.");
+
             // CLEANUP: Remove Advanced Java if it exists
             subjectRepository.findByName("Advanced Java").ifPresent(subject -> {
                 java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository
