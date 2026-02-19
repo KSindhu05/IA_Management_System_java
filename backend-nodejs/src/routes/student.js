@@ -51,6 +51,11 @@ router.get('/all', authMiddleware, roleMiddleware('ADMIN', 'FACULTY', 'HOD', 'PR
         const students = await Student.findAll({
             where: whereClause,
             attributes: ['id', 'regNo', 'name', 'department', 'semester', 'section', 'email', 'phoneNo', 'parentPhone'],
+            include: [{
+                model: CIEMark,
+                as: 'marks',
+                required: false // Left join to include students even without marks
+            }],
             order: [['regNo', 'ASC']]
         });
         res.json(students);
@@ -184,6 +189,64 @@ router.get('/resources', authMiddleware, roleMiddleware('STUDENT'), async (req, 
         res.json(resources);
     } catch (error) {
         console.error('Get student resources error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+// Get Student's Faculty (All faculty in department)
+router.get('/faculty', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
+    try {
+        const student = await Student.findOne({
+            where: { regNo: req.user.username }
+        });
+
+        if (!student) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        // Find all faculty users in the student's department
+        const faculty = await User.findAll({
+            where: {
+                role: 'FACULTY',
+                department: student.department
+            },
+            attributes: ['id', 'fullName', 'email', 'department']
+        });
+
+        if (faculty.length === 0) {
+            return res.json([]);
+        }
+
+        // Get all subjects in the department to map them to instructors
+        const subjects = await Subject.findAll({
+            where: {
+                department: student.department
+            },
+            attributes: ['name', 'instructorId']
+        });
+
+        // Map faculty to current subjects they teach (in this department)
+        const facultyDetails = faculty.map(f => {
+            const teaches = subjects
+                .filter(s => String(s.instructorId) === String(f.id))
+                .map(s => s.name);
+
+            // Remove duplicates and join
+            const uniqueSubjects = [...new Set(teaches)].join(', ');
+
+            return {
+                id: f.id,
+                name: f.fullName || f.username,
+                email: f.email,
+                department: f.department,
+                subjects: uniqueSubjects || 'No active subjects assigned'
+            };
+        });
+
+        res.json(facultyDetails);
+
+    } catch (error) {
+        console.error('Get student faculty error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 });

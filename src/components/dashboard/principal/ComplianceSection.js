@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, memo } from 'react';
 import { Bell } from 'lucide-react';
 import styles from '../../../pages/PrincipalDashboard.module.css';
-import { hodSubmissionStatus } from '../../../utils/mockData';
 
 const determineColor = (val) => {
     if (val >= 90) return '#16a34a';
@@ -9,7 +8,7 @@ const determineColor = (val) => {
     return '#ef4444';
 };
 
-const ComplianceSection = memo(() => {
+const ComplianceSection = memo(({ hodSubmissionStatus = [] }) => {
     const [filter, setFilter] = useState('All');
     const [showModal, setShowModal] = useState(false);
     const [selectedDeptDetails, setSelectedDeptDetails] = useState(null);

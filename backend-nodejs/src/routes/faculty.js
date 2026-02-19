@@ -101,6 +101,33 @@ router.get('/analytics', authMiddleware, roleMiddleware('FACULTY'), async (req, 
 
         const avgScore = countMarks > 0 ? Math.round(totalPercentage / countMarks) : 0;
 
+        // 6. Get List of Low Performers (Marks < 20 and > 0 to avoid unentered/future exams)
+        console.log(`Searching low performers (0 < marks < 20) for subjects: ${subjectIds.join(', ')}`);
+        const lowPerformerMarks = await CIEMark.findAll({
+            where: {
+                subjectId: { [Op.in]: subjectIds },
+                marks: {
+                    [Op.lt]: 20,
+                    [Op.gt]: 0
+                }
+            },
+            include: [
+                { model: require('../models/Student'), as: 'student', attributes: ['name', 'regNo', 'department', 'semester'] },
+                { model: Subject, as: 'subject', attributes: ['name', 'code'] }
+            ],
+            limit: 100,
+            order: [['marks', 'ASC']]
+        });
+        console.log(`Found ${lowPerformerMarks.length} low performers`);
+
+        const lowPerformersList = lowPerformerMarks.map(m => ({
+            name: m.student?.name || 'Unknown',
+            regNo: m.student?.regNo,
+            subject: m.subject?.name || 'Unknown',
+            score: m.marks,
+            cieType: m.cieType // Added cieType
+        }));
+
         res.json({
             evaluated, // "Evaluated" count
             pending,   // "Pending" count
@@ -108,7 +135,8 @@ router.get('/analytics', authMiddleware, roleMiddleware('FACULTY'), async (req, 
             avgScore,
             lowPerformers,
             topPerformers,
-            start: "Deadline: Nov 10, 2025" // Passing static deadline as requested/implied
+            start: "Deadline: Nov 10, 2025",
+            lowPerformersList // Data for Action Required table
         });
 
     } catch (error) {

@@ -4,9 +4,10 @@
     width: 280px;
     /* Increased from 260px */
     height: 100vh;
-    background-color: #ffffff;
-    border-right: 1px solid #e2e8f0;
-    color: #1e293b;
+    background-color: var(--bg-sidebar);
+    /* White Sidebar */
+    border-right: 1px solid var(--border-color);
+    color: var(--text-primary);
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -26,7 +27,7 @@
     /* Increased gap */
     margin-bottom: 0.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .sidebarLogo {
@@ -45,15 +46,13 @@
 .collegeName {
     font-weight: 700;
     font-size: 1rem;
-    /* Increased font */
     line-height: 1.2;
-    color: #1e293b;
+    color: var(--primary);
 }
 
 .subtext {
     font-size: 0.8rem;
-    /* Increased font */
-    color: #64748b;
+    color: var(--text-secondary);
 }
 
 .userInfo {
@@ -65,7 +64,7 @@
     padding: 0.5rem 0;
     /* Adjusted padding */
     border-radius: 0;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .avatar {
@@ -96,7 +95,7 @@
     font-size: 0.95rem;
     /* Larger font */
     font-weight: 600;
-    color: #1e293b;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -106,7 +105,7 @@
     margin: 0;
     font-size: 0.8rem;
     /* Larger font */
-    color: #64748b;
+    color: var(--text-secondary);
     letter-spacing: 0.5px;
 }
 
@@ -118,6 +117,13 @@
     flex: 1;
     overflow-y: auto;
     padding-top: 0.5rem;
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.nav::-webkit-scrollbar {
+    display: none;
 }
 
 /* --- NEW STYLES FOR GROUPED SIDEBAR --- */
@@ -125,7 +131,7 @@
     font-size: 0.75rem;
     /* Larger header */
     font-weight: 700;
-    color: #94a3b8;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin: 1rem 0 0.4rem 0.6rem;
@@ -148,15 +154,12 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    /* More gap */
     padding: 0.75rem 1rem;
-    /* "Little big" padding */
     border-radius: 10px;
-    /* Softer corners */
-    color: #64748b;
+    color: var(--text-secondary);
+    /* Slate Text */
     text-decoration: none;
     font-size: 0.95rem;
-    /* Larger font */
     font-weight: 500;
     transition: all 0.2s ease;
     border-bottom: none;
@@ -167,19 +170,19 @@
 }
 
 .navItem:hover {
-    background-color: #f1f5f9;
-    color: #334155;
+    background-color: var(--bg-hover);
+    color: var(--primary);
     transform: translateX(4px);
-    /* Subtle interaction */
 }
 
 /* Specific styling for active link */
 .active {
-    background-color: #eff6ff;
-    color: #2563eb;
+    background-color: #EFF6FF;
+    color: var(--primary);
     font-weight: 600;
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.05);
-    /* Slight elevation */
+    box-shadow: none;
+    /* Glow effect */
+    border-left: 4px solid var(--secondary);
 }
 
 .active:hover {
@@ -198,6 +201,7 @@
     border: none;
     background: none;
     color: #ef4444;
+    /* Keep red for logout */
     cursor: pointer;
     font-size: 1rem;
     /* Larger font */
@@ -206,8 +210,14 @@
     border-radius: 12px;
     transition: all 0.2s;
     margin-top: 0;
-    border-top: 1px solid #f1f5f9;
+    border-top: 1px solid var(--border-color);
     padding-top: 1.25rem;
+}
+
+@media print {
+    .sidebar {
+        display: none !important;
+    }
 }
 
 .logoutButton:hover {
@@ -224,7 +234,7 @@
         position: relative;
         padding: 0.5rem 1rem;
         border-right: none;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--border-color);
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
@@ -285,11 +295,11 @@
         /* Don't shrink */
         padding: 0.5rem 0.75rem;
         font-size: 0.8rem;
-        border: 1px solid #f1f5f9;
+        border: 1px solid var(--border-color);
         border-radius: 99px;
         /* Pill shape for horizontal nav */
         white-space: nowrap;
-        background: #f8fafc;
+        background: var(--bg-hover);
     }
 
     .navItem span {

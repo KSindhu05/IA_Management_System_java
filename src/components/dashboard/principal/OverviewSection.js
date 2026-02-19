@@ -5,11 +5,11 @@ import styles from '../../../pages/PrincipalDashboard.module.css';
 // import { collegeStats, principalStats, academicTrends } from '../../../utils/mockData'; // Removed static mock imports
 import {
     PendingApprovalsWidget, FocusListWidget,
-    YearComparisonWidget, NotesWidget, FacultyPerformanceWidget, ScheduleWidget, ActionCenter, CIEStatsWidget
+    YearComparisonWidget, NotesWidget, FacultyPerformanceWidget, ScheduleWidget, ActionCenter, CIEStatsWidget, LowPerformersWidget
 } from './Widgets';
 
 // Premium Hero Card Component
-const HeroStatCard = ({ label, value, icon: Icon, color, trend, gradient, customContent }) => (
+const HeroStatCard = ({ label, value, icon: Icon, color, trend, gradient, customContent, onClick }) => (
     <div style={{
         background: gradient || 'white',
         borderRadius: '24px',
@@ -21,10 +21,11 @@ const HeroStatCard = ({ label, value, icon: Icon, color, trend, gradient, custom
         justifyContent: 'space-between',
         height: '160px',
         transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-        cursor: 'default',
+        cursor: onClick ? 'pointer' : 'default',
         position: 'relative',
         overflow: 'hidden'
     }}
+        onClick={onClick}
         onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = '0 20px 40px -5px rgba(0,0,0,0.1)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 30px -5px rgba(0,0,0,0.05)'; }}
     >
@@ -65,7 +66,10 @@ const HeroStatCard = ({ label, value, icon: Icon, color, trend, gradient, custom
     </div>
 );
 
-const OverviewSection = memo(({ stats, chartData, branches, branchPerformance }) => (
+const OverviewSection = memo(({
+    stats, chartData, branches, branchPerformance, lowPerformers,
+    facultyAnalytics, schedule, approvals, cieStats, trends, hodSubmissionStatus, onNavigate
+}) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.6s ease-out' }}>
 
         {/* --- HERO STATS (FLOWCHART: OVERVIEW PANEL) --- */}
@@ -77,14 +81,16 @@ const OverviewSection = memo(({ stats, chartData, branches, branchPerformance })
                 color="#3b82f6"
                 trend="+5%"
                 gradient="linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)"
+                onClick={() => onNavigate && onNavigate('directory')}
             />
             <HeroStatCard
                 label="Total Faculty"
-                value="42" // Placeholder until Faculty API is ready
+                value={stats?.totalFaculty || "Loading..."}
                 icon={Users}
                 color="#8b5cf6"
                 trend="Stable"
                 gradient="linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)"
+                onClick={() => onNavigate && onNavigate('faculty')}
             />
             <HeroStatCard
                 label="Departments"
@@ -93,13 +99,15 @@ const OverviewSection = memo(({ stats, chartData, branches, branchPerformance })
                 color="#f59e0b"
                 trend="Active"
                 gradient="linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)"
+                onClick={() => onNavigate && onNavigate('departments')}
             />
             <HeroStatCard
                 label="CIE Status"
                 icon={Activity}
                 color="#10b981"
                 gradient="linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)"
-                customContent={<CIEStatsWidget />}
+                customContent={<CIEStatsWidget {...cieStats} />}
+                onClick={() => onNavigate && onNavigate('compliance')}
             />
         </div>
 
@@ -155,17 +163,19 @@ const OverviewSection = memo(({ stats, chartData, branches, branchPerformance })
 
                 {/* Trend & Faculty Rows (FLOWCHART: FACULTY MONITORING) */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                    <FacultyPerformanceWidget />
-                    <ScheduleWidget />
+                    <FacultyPerformanceWidget analytics={facultyAnalytics} />
+                    <ScheduleWidget schedule={schedule} />
                 </div>
+                <LowPerformersWidget data={lowPerformers} />
             </div>
 
             {/* RIGHT COLUMN (Action Center & Approvals) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 <ActionCenter />
                 {/* FLOWCHART: PENDING CIE APPROVALS */}
-                <PendingApprovalsWidget />
-                <FocusListWidget />
+                <PendingApprovalsWidget approvals={approvals} />
+                <FocusListWidget branches={branches} branchPerformance={branchPerformance} hodSubmissionStatus={hodSubmissionStatus} />
+                <YearComparisonWidget trends={trends} />
             </div>
         </div>
 

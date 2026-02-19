@@ -1,0 +1,10 @@
+Database connected.
+
+Checking for Faculty in Section C...
+No Faculty in Section C.
+
+Checking for Students in Section C...
+No Students in Section C.
+
+Checking for Students in Section B...
+Found 0 students in Section B.

@@ -1,0 +1,15 @@
+﻿[dotenv@17.2.4] injecting env (7) from .env -- tip: ≡ƒôí add observability to secrets: https://dotenvx.com/ops
+Executing (default): SELECT 1+1 AS result
+Executing (default): SELECT 1+1 AS result
+Γ£ô Database connected successfully
+Connection has been established successfully.
+Executing (default): SELECT `id`, `name`, `code`, `department`, `semester`, `credits`, `instructorId`, `instructorName` FROM `subjects` AS `Subject`;
+Total Subjects: 5
+--- SUBJECT LIST START ---
+[SUBJECT] ID: 5 | Name: "Engineering Maths-II" | Dept: "CS" | Instructor: "Miss Manju Sree"
+[SUBJECT] ID: 6 | Name: "English Communication" | Dept: "CS" | Instructor: "Nasrin Banu"
+[SUBJECT] ID: 7 | Name: "CAEG" | Dept: "CS" | Instructor: "Ramesh Gouda"
+[SUBJECT] ID: 8 | Name: "Python" | Dept: "CS" | Instructor: "Wahida Banu"
+[SUBJECT] ID: 9 | Name: "Indian Constitution" | Dept: "CS" | Instructor: "Razana"
+--- SUBJECT LIST END ---
+Unique Departments: [ 'CS' ]

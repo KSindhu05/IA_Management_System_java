@@ -1487,3 +1487,88 @@
     box-shadow: 0 8px 12px -3px rgba(79, 70, 229, 0.4);
     filter: brightness(1.1);
 }
+
+.studentList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.studentItem {
+    transition: all 0.2s;
+}
+
+.studentItem:hover {
+    background-color: #f8fafc !important;
+}
+
+.manualEntryForm {
+    padding: 1rem 0;
+}
+
+.infoGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.infoItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.infoLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.largeInput {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    background: #f8fafc;
+}
+
+.largeInput:focus {
+    outline: none;
+    border-color: #2563eb;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Edit Student Modal Form Styles */
+.formGroup {
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.formGroup label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #4b5563;
+}
+
+.input {
+    padding: 0.75rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: #1e293b;
+    transition: all 0.2s;
+    background: #f8fafc;
+    width: 100%;
+}
+
+.input:focus {
+    outline: none;
+    border-color: #2563eb;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}

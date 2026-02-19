@@ -1,19 +1,57 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #f9fafb;
-  --bg-card: #ffffff;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --border-color: #e5e7eb;
+  /* Academic Color System */
+  --primary: #1E3A8A;
+  /* Dark Academic Blue */
+  --primary-hover: #1e40af;
+  --secondary: #3B82F6;
+  /* Bright Blue */
+  --success: #16A34A;
+  /* Green */
+  --warning: #F59E0B;
+  /* Orange */
+  --danger: #DC2626;
+  /* Red */
+
+  /* Light Theme */
+  --bg-primary: #FFFFFF;
+  /* White */
+  --bg-card: #FFFFFF;
+  --bg-sidebar: #FFFFFF;
+  /* White Sidebar */
+  --bg-hover: #F1F5F9;
+  /* Light Gray Hover */
+
+  --text-primary: #0F172A;
+  /* Dark Blue-Gray */
+  --text-secondary: #64748B;
+  /* Slate Gray */
+  --border-color: #E2E8F0;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 body.dark-mode {
-  --bg-primary: #111827;
-  --bg-card: #1f2937;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --border-color: #374151;
+  /* Dark Theme */
+  --bg-primary: #0F172A;
+  /* Dark Slate */
+  --bg-card: #1E293B;
+  /* Darker Slate */
+  --bg-sidebar: #0f172a;
+  /* Even Darker */
+  --bg-hover: #334155;
+
+  --text-primary: #F8FAFC;
+  /* Off-white */
+  --text-secondary: #94A3B8;
+  /* Light Slate */
+  --border-color: #334155;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
 }
 
 body {
@@ -82,4 +120,32 @@ code {
 
 * {
   box-sizing: border-box;
+}
+
+@media print {
+  /* Hide Sidebar and Layout Elements Globally */
+  /* We target by class names likely used in modules, assuming they are somewhat unique or standard */
+  /* Sidebar uses .sidebar in module, but the element is a <div class="_sidebar_..."> */
+  /* We can try more generic selectors or :global if we were in a module, but here in global CSS */
+  /* we rely on the fact that class names from modules might be harder to target directly if hashed. */
+  /* HOWEVER, Create React App usually keeps names readable or we can target by DOM structure */
+
+  /* Target the Sidebar container - usually the first child of layout */
+  /* Or better, add a specific ID or class in the code. But since I can't easily add IDs without editing multiple files, 
+     I will try to target by the known structure or class substring if possible. 
+     But wait, CSS modules generate unique classes. 
+     I SHOULD EDIT Sidebar.module.css and DashboardLayout.module.css to add @media print { display: none; } inside them.
+     That is the safer way. 
+  */
+
+  /* Retrying the plan: The user saw the sidebar. It means Sidebar.module.css didn't have print hidden. */
+  /* Accessing the module classes from global css is hard. */
+  /* I will add @media print { display: none } to Sidebar.module.css and DashboardLayout.module.css directly. */
+
+  /* But for now, let's also add some generic resets here just in case */
+  body {
+    background: white;
+    font-size: 12pt;
+    color: black;
+  }
 }

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, memo } from 'react';
 import { X, Search, Filter, Download, AlertTriangle, CheckCircle, Clock, ArrowLeft } from 'lucide-react';
 import styles from '../../../pages/PrincipalDashboard.module.css';
-import { departments } from '../../../utils/mockData';
+import { useAuth } from '../../../context/AuthContext';
+import API_BASE_URL from '../../../config/api';
 
 const StudentProfileModal = ({ selectedStudentProfile, setSelectedStudentProfile, selectedDept }) => {
     if (!selectedStudentProfile) return null;
@@ -33,7 +34,7 @@ const StudentProfileModal = ({ selectedStudentProfile, setSelectedStudentProfile
                         {s.name.charAt(0)}
                     </div>
                     <h2 style={{ margin: '0 0 0.5rem', color: '#0f172a' }}>{s.name}</h2>
-                    <p style={{ margin: 0, color: '#64748b' }}>{s.rollNo} | {selectedDept?.name} | {s.sem} Sem</p>
+                    <p style={{ margin: 0, color: '#64748b' }}>{s.regNo || s.rollNo} | {selectedDept?.name} | {s.semester || s.sem} Sem</p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
@@ -41,28 +42,19 @@ const StudentProfileModal = ({ selectedStudentProfile, setSelectedStudentProfile
                         <h4 style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.9rem' }}>Academic Performance</h4>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                             <span>CIE-1</span>
-                            <span>{s.marks.cie1}/20</span>
+                            <span>{s.marks?.cie1 || 0}/20</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                             <span>CIE-2</span>
-                            <span>{s.marks.cie2}/20</span>
+                            <span>{s.marks?.cie2 || 0}/20</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#0f172a', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
                             <span>Total</span>
-                            <span>{s.marks.cie1 + s.marks.cie2}/40</span>
+                            <span>{(s.marks?.cie1 || 0) + (s.marks?.cie2 || 0)}/40</span>
                         </div>
                     </div>
                     <div className={styles.glassCard} style={{ padding: '1rem' }}>
-                        <h4 style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.9rem' }}>Attendance & Behavior</h4>
-                        <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                <span>Attendance</span>
-                                <span style={{ fontWeight: 'bold', color: s.attendance < 75 ? '#dc2626' : '#16a34a' }}>{s.attendance}%</span>
-                            </div>
-                            <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px' }}>
-                                <div style={{ width: `${s.attendance}%`, height: '100%', background: s.attendance < 75 ? '#dc2626' : '#16a34a', borderRadius: '3px' }}></div>
-                            </div>
-                        </div>
+                        <h4 style={{ margin: '0 0 0.5rem', color: '#64748b', fontSize: '0.9rem' }}>Behavior</h4>
                         <div>
                             <span style={{ padding: '4px 8px', background: '#f0f9ff', color: '#0284c7', borderRadius: '4px', fontSize: '0.8rem' }}>Good Conduct</span>
                         </div>
@@ -78,7 +70,8 @@ const StudentProfileModal = ({ selectedStudentProfile, setSelectedStudentProfile
     );
 };
 
-export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptClick, setSelectedDept, setSelectedStudentProfile: propSetSelectedStudentProfile }) => {
+export const DirectorySection = memo(({ departments = [], selectedDept, deptStudents, handleDeptClick, setSelectedDept, setSelectedStudentProfile: propSetSelectedStudentProfile }) => {
+    const { user } = useAuth();
     const [semester, setSemester] = useState('2nd');
     const [section, setSection] = useState('A');
     const [currentPage, setCurrentPage] = useState(1);
@@ -110,48 +103,66 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
         }
     };
 
-    // Helper to generate random students with REALISTIC EXTENSIONS
-    const randomStudents = useMemo(() => {
-        if (semester === '2nd') return [];
+    // State for students fetched from API
+    const [apiStudents, setApiStudents] = useState([]);
+    const [localLoading, setLocalLoading] = useState(false);
 
-        const count = 63;
-        const firstNames = ['Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun', 'Sai', 'Reyansh', 'Ayan', 'Krishna', 'Ishaan', 'Shaurya', 'Atharv', 'Neerav', 'Rohan', 'Aryan', 'Dhruv', 'Kabir', 'Riyan', 'Ananya', 'Diya', 'Sana', 'Aaradhya', 'Kiara', 'Pari', 'Anika', 'Myra', 'Riya', 'Anya', 'Ahana', 'Kyra'];
-        const lastNames = ['Sharma', 'Verma', 'Gupta', 'Malhotra', 'Bhat', 'Saxena', 'Mehta', 'Joshi', 'Singh', 'Kumar', 'Reddy', 'Patel', 'Das', 'Roy', 'Nair', 'Rao', 'Iyer', 'Menon', 'Gowda', 'Shetty'];
+    // Fetch students when department changes (or on mount if all)
+    React.useEffect(() => {
+        const fetchStudents = async () => {
+            if (!selectedDept || !selectedDept.id) return;
 
-        return Array.from({ length: count }, (_, i) => ({
-            id: `RND${semester}${section}${i}`,
-            rollNo: `459CS${25 - (parseInt(semester) || 1)}0${String(i + 1).padStart(2, '0')}`,
-            name: `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`,
-            sem: semester,
-            section: section,
-            attendance: Math.floor(Math.random() * 30) + 70,
-            marks: {
-                cie1: Math.floor(Math.random() * 20),
-                cie2: Math.floor(Math.random() * 20)
-            },
-            feesStatus: Math.random() > 0.15 ? 'Paid' : 'Pending',
-            mentoringStatus: Math.random() > 0.3 ? 'Done' : 'Pending',
-        }));
-    }, [semester, section]);
+            setLocalLoading(true);
+            try {
+                // Determine API endpoint
+                const token = user?.token;
+                const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+                const endpoint = `${API_BASE_URL}/student/all?department=${selectedDept.id}`;
+                const response = await fetch(endpoint, { headers });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setApiStudents(data);
+                } else {
+                    console.error("Failed to fetch students");
+                    setApiStudents([]);
+                }
+            } catch (error) {
+                console.error("Error fetching students:", error);
+            } finally {
+                setLocalLoading(false);
+            }
+        };
+
+        if (user) {
+            fetchStudents();
+        }
+    }, [selectedDept, user]);
+
 
     // Derived State: Filtered Students
     const filteredStudents = useMemo(() => {
         setCurrentPage(1);
-        let baseList = semester === '2nd' ? deptStudents.filter(s => s.section === section) : randomStudents;
 
-        // Ensure real data also has the extra fields if missing
-        baseList = baseList.map(s => ({
-            ...s,
-            feesStatus: s.feesStatus || (Math.random() > 0.15 ? 'Paid' : 'Pending'),
-            mentoringStatus: s.mentoringStatus || (Math.random() > 0.3 ? 'Done' : 'Pending')
-        }));
+        // Use API data
+        let baseList = apiStudents;
 
         return baseList.filter(s => {
-            const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.rollNo.includes(searchQuery);
-            const isAtRisk = showAtRisk ? (s.attendance < 75 || ((s.marks.cie1 + s.marks.cie2) / 40) < 0.5) : true;
-            return matchesSearch && isAtRisk;
+            const matchesSearch = (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (s.regNo || '').includes(searchQuery);
+            // Optional: Filter by sem/sec if selected (omitted for strictly search-based for now or add back if needed)
+            const matchesSem = semester === 'All' || s.semester == semester.replace(/\D/g, ''); // Extract number
+            // const matchesSec = section === 'All' || s.section === section;
+
+            // Risk calculation: student is at risk if total CIE marks < 40% (16/40)
+            const totalMarks = (s.marks?.cie1 || 0) + (s.marks?.cie2 || 0);
+            const isAtRisk = totalMarks < 16;
+
+            // If filter is active, only show at-risk students; otherwise show all
+            const matchesRisk = showAtRisk ? isAtRisk : true;
+
+            return matchesSearch && matchesSem && matchesRisk;
         });
-    }, [semester, section, deptStudents, randomStudents, searchQuery, showAtRisk]);
+    }, [apiStudents, searchQuery, showAtRisk, semester, section]);
 
     // Pagination Logic
     const paginatedStudents = useMemo(() => {
@@ -237,11 +248,7 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
                             <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Total Students</p>
                             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>{filteredStudents.length}</p>
                         </div>
-                        <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.3)' }}></div>
-                        <div style={{ textAlign: 'right' }}>
-                            <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.8 }}>Avg Attendance</p>
-                            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 700 }}>86%</p>
-                        </div>
+
                     </div>
                 </div>
             </div>
@@ -270,13 +277,14 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
                     <button
                         onClick={() => setShowAtRisk(!showAtRisk)}
                         style={{
-                            padding: '0.5rem 1rem', borderRadius: '10px', border: showAtRisk ? '1px solid #ef4444' : '1px solid #e2e8f0',
-                            background: showAtRisk ? '#fef2f2' : 'white', color: showAtRisk ? '#ef4444' : '#64748b',
+                            padding: '0.7rem 1rem', borderRadius: '10px',
+                            border: showAtRisk ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                            background: showAtRisk ? '#eff6ff' : 'white', color: showAtRisk ? '#2563eb' : '#0f172a',
                             display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600,
                             transition: 'all 0.2s'
                         }}
                     >
-                        <AlertTriangle size={16} /> {showAtRisk ? 'Showing At-Risk' : 'At-Risk Only'}
+                        <Filter size={16} /> {showAtRisk ? 'At Risk' : 'Filter'}
                     </button>
                 </div>
 
@@ -343,9 +351,9 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
                             <th>Reg No</th>
                             <th>Name</th>
                             <th>Sem</th>
-                            <th>Attendance</th>
+
                             <th>CIE Performance</th>
-                            <th>Fees Status</th>
+
                             <th>Mentoring</th>
                             <th>Actions</th>
                         </tr>
@@ -358,40 +366,25 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
                                         <input type="checkbox" checked={selectedStudents.includes(student.id)} onChange={() => handleSelectStudent(student.id)} />
                                     </td>
                                     <td style={{ color: '#64748b', fontWeight: 500 }}>{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                                    <td>{student.rollNo}</td>
+                                    <td>{student.regNo || student.rollNo}</td>
                                     <td style={{ fontWeight: 600 }}>
                                         {student.name}
-                                        {student.attendance < 75 && <span style={{ display: 'inline-block', width: '6px', height: '6px', background: '#ef4444', borderRadius: '50%', marginLeft: '6px', verticalAlign: 'middle' }}></span>}
                                     </td>
-                                    <td>{student.sem}</td>
-                                    <td>
-                                        <span style={{
-                                            padding: '4px 8px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600,
-                                            background: student.attendance >= 75 ? '#dcfce7' : '#fee2e2',
-                                            color: student.attendance >= 75 ? '#166534' : '#991b1b'
-                                        }}>
-                                            {student.attendance}%
-                                        </span>
-                                    </td>
+                                    <td>{student.semester || student.sem}</td>
+
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <div style={{ width: '80px', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
                                                 <div style={{
-                                                    width: `${(student.marks.cie1 + student.marks.cie2) / 40 * 100}%`,
+                                                    width: `${((student.marks?.cie1 || 0) + (student.marks?.cie2 || 0)) / 40 * 100}%`,
                                                     height: '100%',
-                                                    background: ((student.marks.cie1 + student.marks.cie2) / 40) >= 0.5 ? '#3b82f6' : '#f59e0b'
+                                                    background: (((student.marks?.cie1 || 0) + (student.marks?.cie2 || 0)) / 40) >= 0.5 ? '#3b82f6' : '#f59e0b'
                                                 }}></div>
                                             </div>
-                                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{Math.round((student.marks.cie1 + student.marks.cie2) / 40 * 100)}%</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{Math.round(((student.marks?.cie1 || 0) + (student.marks?.cie2 || 0)) / 40 * 100)}%</span>
                                         </div>
                                     </td>
-                                    <td>
-                                        {student.feesStatus === 'Paid' ? (
-                                            <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.85rem' }}>Paid</span>
-                                        ) : (
-                                            <span style={{ color: '#ea580c', fontWeight: 600, fontSize: '0.85rem', background: '#ffedd5', padding: '2px 8px', borderRadius: '8px' }}>Pending</span>
-                                        )}
-                                    </td>
+
                                     <td>
                                         {student.mentoringStatus === 'Done' ? (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#64748b', fontSize: '0.85rem' }}>
@@ -412,7 +405,7 @@ export const DirectorySection = memo(({ selectedDept, deptStudents, handleDeptCl
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="9" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                                <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                                         <Search size={32} color="#cbd5e1" />
                                         <p style={{ margin: 0 }}>No students found matching your filters.</p>

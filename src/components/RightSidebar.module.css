@@ -1,0 +1,91 @@
+.container {
+    width: 300px;
+    height: 100vh;
+    background: #ffffff;
+    border-left: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 40;
+    overflow: hidden;
+    padding-top: 2rem;
+    /* Match header height roughly? Or just padding */
+}
+
+.header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #f3f4f6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #111827;
+    font-weight: 600;
+}
+
+.count {
+    background: #eff6ff;
+    color: #2563eb;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    transition: background 0.2s;
+    border: 1px solid transparent;
+}
+
+.item:hover {
+    background: #f9fafb;
+}
+
+.unread {
+    background: #fcfdfe;
+    /* Very slight blue tint or just white */
+    border-left: 3px solid #3b82f6;
+}
+
+.iconWrapper {
+    margin-top: 2px;
+}
+
+.content {
+    flex: 1;
+}
+
+.message {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.9rem;
+    color: #374151;
+    line-height: 1.4;
+}
+
+.time {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+.emptyState {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #9ca3af;
+}

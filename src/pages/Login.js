@@ -10,6 +10,7 @@ import bg2 from '../assets/slideshow_1.png';
 import bg3 from '../assets/slideshow_2.png';
 import bg4 from '../assets/slideshow_3.png';
 import headerLogo from '../assets/header_logo.png';
+import collegeLogo from '../assets/college1_logo.png';
 
 const backgroundImages = [bg1, bg2, bg3, bg4];
 
@@ -31,7 +32,7 @@ const Login = () => {
     const typeWriterStrings = [
         "IA Management System for Diploma Education",
         "Track Internal Assessment Marks",
-        "Monitor Attendance & Academic Performance",
+        "Monitor Academic Performance",
         "Role-Based Access for Students and Faculty"
     ];
 
@@ -167,8 +168,9 @@ const Login = () => {
                 <div className={styles.particle}></div>
             </div>
 
-            {/* TOP HEADER - Text Only per spec */}
+            {/* TOP HEADER - Logo + Text */}
             <div className={styles.topHeader}>
+                <img src={collegeLogo} alt="SGP Logo" className={styles.brandLogo} />
                 <h1 className={styles.collegeName}>
                     <span className={styles.whiteText}>SANJAY GANDHI POLYTECHNIC</span>
                 </h1>
@@ -177,7 +179,7 @@ const Login = () => {
             {/* Team Member Ticker */}
             <div className={styles.tickerContainer}>
                 <div className={styles.tickerContent}>
-                    This project IA MANAGEMENT SYSTEM has been done by C H Praveen kumar, K Sindhu, M Priyanka, V Akshaya, Amrutha, Gouthami, Chandana, Arshiya, Tasmiya
+                    This project IA MANAGEMENT SYSTEM has been done by K Sindhu, M Priyanka, V Akshaya, Amrutha, Gouthami, Chandana, Arshiya, Tasmiya
                 </div>
             </div>
 

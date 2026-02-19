@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, X, CheckCircle, AlertCircle, Info, Hash } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import styles from './NotificationPanel.module.css';
 
 const NotificationPanel = ({ onClose }) => {
@@ -8,7 +9,7 @@ const NotificationPanel = ({ onClose }) => {
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const API_BASE = 'http://127.0.0.1:8083/api/notifications';
+    const API_BASE = `${API_BASE_URL}/notifications`;
 
     useEffect(() => {
         fetchNotifications();

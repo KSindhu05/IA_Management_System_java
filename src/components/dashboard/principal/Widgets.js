@@ -4,12 +4,9 @@ import {
 } from 'lucide-react';
 import { Line, Doughnut } from 'react-chartjs-2';
 import styles from '../../../pages/PrincipalDashboard.module.css';
-import {
-    studentsList, facultyClassAnalytics, principalSchedule, collegeStats,
-    hodSubmissionStatus, academicTrends
-} from '../../../utils/mockData';
 
-export const StudentSentinel = memo(() => {
+
+export const StudentSentinel = memo(({ students = [] }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
@@ -18,7 +15,7 @@ export const StudentSentinel = memo(() => {
         const val = e.target.value;
         setQuery(val);
         if (val.length > 1) {
-            const matches = studentsList.filter(s =>
+            const matches = students.filter(s =>
                 s.name.toLowerCase().includes(val.toLowerCase()) ||
                 s.regNo.toLowerCase().includes(val.toLowerCase())
             ).slice(0, 5);
@@ -60,7 +57,7 @@ export const StudentSentinel = memo(() => {
     );
 });
 
-export const FacultyPerformanceWidget = memo(() => (
+export const FacultyPerformanceWidget = memo(({ analytics = { avgScore: 0, passRate: 0, evaluated: 0, pending: 0 } }) => (
     <div className={styles.glassCard} style={{ borderRadius: '24px', border: 'none', background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
             <h3 className={styles.chartTitle} style={{ margin: 0, fontSize: '1.1rem' }}>Faculty Pulse</h3>
@@ -70,26 +67,26 @@ export const FacultyPerformanceWidget = memo(() => (
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#3b82f6' }}>{facultyClassAnalytics.avgScore}%</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#3b82f6' }}>{analytics.avgScore}%</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Avg Score</div>
             </div>
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#10b981' }}>{facultyClassAnalytics.passRate}%</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#10b981' }}>{analytics.passRate}%</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Pass Rate</div>
             </div>
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f59e0b' }}>{facultyClassAnalytics.evaluated}</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#f59e0b' }}>{analytics.evaluated}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Evaluated</div>
             </div>
             <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>{facultyClassAnalytics.pending}</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ef4444' }}>{analytics.pending}</div>
                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Pending</div>
             </div>
         </div>
     </div>
 ));
 
-export const ScheduleWidget = memo(() => (
+export const ScheduleWidget = memo(({ schedule = [] }) => (
     <div className={styles.glassCard} style={{ borderRadius: '24px', border: 'none', background: 'linear-gradient(145deg, #ffffff, #fefce8)', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <div style={{ padding: '6px', background: '#fef9c3', borderRadius: '8px', color: '#ca8a04' }}>
@@ -98,7 +95,7 @@ export const ScheduleWidget = memo(() => (
             <h3 className={styles.chartTitle} style={{ margin: 0, fontSize: '1.1rem' }}>Today's Schedule</h3>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {principalSchedule.map((item) => (
+            {schedule.length > 0 ? schedule.map((item) => (
                 <div key={item.id} style={{
                     display: 'flex', gap: '1rem', alignItems: 'center', background: 'white', padding: '0.75rem 1rem', borderRadius: '12px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.02)', borderLeft: item.type === 'Urgent' ? '4px solid #ef4444' : '4px solid #3b82f6'
@@ -109,24 +106,24 @@ export const ScheduleWidget = memo(() => (
                         <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.type}</div>
                     </div>
                 </div>
-            ))}
+            )) : <div style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem' }}>No events scheduled</div>}
         </div>
     </div>
 ));
 
-export const ConfidenceScoreWidget = memo(({ headings }) => (
+export const ConfidenceScoreWidget = memo(({ branches = [], branchPerformance = [], hodSubmissionStatus = [] }) => (
     <div className={styles.glassCard} style={{ padding: '1.5rem', borderRadius: '24px' }}>
         <h3 className={styles.chartTitle} style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
             <Award size={20} color="#f59e0b" /> Department Confidence
         </h3>
         <table className={styles.table} style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
-                {collegeStats.branches.map((dept, index) => {
-                    const performance = collegeStats.branchPerformance[index];
+                {branches.map((dept, index) => {
+                    const performance = branchPerformance[index] || 0;
                     const compliance = hodSubmissionStatus.find(h => h.id === dept)?.status === 'Approved' ? 100 : 50;
                     const confidence = Math.round((performance * 0.6) + (compliance * 0.4));
                     const color = confidence > 80 ? '#10b981' : confidence > 60 ? '#f59e0b' : '#ef4444';
-                    const bg = confidence > 80 ? '#dcfce7' : confidence > 60 ? '#fef3c7' : '#fee2e2';
+
 
                     return (
                         <tr key={dept} style={{ borderBottom: '1px solid #f8fafc' }}>
@@ -145,11 +142,11 @@ export const ConfidenceScoreWidget = memo(({ headings }) => (
     </div>
 ));
 
-export const FocusListWidget = memo(() => {
-    const criticalDepts = collegeStats.branches
+export const FocusListWidget = memo(({ branches = [], branchPerformance = [], hodSubmissionStatus = [] }) => {
+    const criticalDepts = branches
         .map((dept, i) => ({
             name: dept,
-            score: collegeStats.branchPerformance[i],
+            score: branchPerformance[i] || 0,
             status: hodSubmissionStatus.find(h => h.id === dept)?.punctuality
         }))
         .filter(d => d.score < 70 || d.status === 'Delayed');
@@ -178,11 +175,11 @@ export const FocusListWidget = memo(() => {
     );
 });
 
-export const YearComparisonWidget = memo(() => {
+export const YearComparisonWidget = memo(({ trends = { labels: [], datasets: [] } }) => {
     const data = {
-        labels: academicTrends.labels,
+        labels: trends.labels || [],
         datasets: [
-            academicTrends.datasets[0], // Current Trend
+            trends.datasets?.[0] || { data: [] }, // Current Trend
             {
                 label: 'Previous Cycle',
                 data: [65, 70, 72, 69, 75],
@@ -260,23 +257,17 @@ export const ActionCenter = memo(() => (
     </div>
 ));
 
-export const PendingApprovalsWidget = memo(() => {
-    const pendingItems = [
-        { id: 1, dept: 'Computer Science', subject: 'Data Structures', faculty: 'Dr. Smith', date: 'Just now' },
-        { id: 2, dept: 'Mechanical', subject: 'Thermodynamics', faculty: 'Prof. Rao', date: '2 hrs ago' },
-        { id: 3, dept: 'Civil', subject: 'Structural Analysis', faculty: 'Ms. Anjali', date: 'Yesterday' }
-    ];
-
+export const PendingApprovalsWidget = memo(({ approvals = [] }) => {
     return (
         <div className={styles.glassCard} style={{ borderRadius: '24px', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h3 className={styles.chartTitle} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
                     <ShieldCheck size={20} color="#8b5cf6" /> Pending Approvals
                 </h3>
-                <span style={{ background: '#8b5cf6', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>{pendingItems.length} New</span>
+                <span style={{ background: '#8b5cf6', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>{approvals.length} New</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
-                {pendingItems.map(item => (
+                {approvals.length > 0 ? approvals.map(item => (
                     <div key={item.id} style={{ padding: '0.75rem', background: '#fcfaff', border: '1px solid #f3e8ff', borderRadius: '12px', transition: 'background 0.2s' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                             <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e293b' }}>{item.subject}</span>
@@ -287,24 +278,27 @@ export const PendingApprovalsWidget = memo(() => {
                             <button style={{ padding: '4px 12px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => alert(`Reviewing ${item.subject}`)}>Review</button>
                         </div>
                     </div>
-                ))}
+                )) : <div style={{ color: '#94a3b8', textAlign: 'center' }}>No pending approvals</div>}
             </div>
             <button style={{ marginTop: 'auto', width: '100%', padding: '0.75rem', background: 'transparent', border: 'none', color: '#8b5cf6', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>View All Requests</button>
         </div>
     );
 });
 
-export const CIEStatsWidget = memo(() => {
+export const CIEStatsWidget = memo(({ conducted = 65, pending = 15, graded = 20 }) => {
     // Mock Data for CIE Status
     const data = {
         labels: ['Conducted', 'Pending', 'Graded'],
         datasets: [{
-            data: [65, 15, 20],
+            data: [conducted, pending, graded],
             backgroundColor: ['#10b981', '#ef4444', '#3b82f6'],
             borderWidth: 0,
             hoverOffset: 4
         }]
     };
+
+    const total = conducted + pending + graded;
+    const completedPercent = total > 0 ? Math.round(((conducted + graded) / total) * 100) : 0;
 
     return (
         <div style={{ height: '160px', width: '160px', position: 'relative' }}>
@@ -320,3 +314,58 @@ export const CIEStatsWidget = memo(() => {
         </div>
     );
 });
+
+export const LowPerformersWidget = memo(({ data }) => (
+    <div className={styles.glassCard} style={{ borderRadius: '24px', border: '1px solid #fee2e2', background: '#fff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 className={styles.chartTitle} style={{ margin: 0, fontSize: '1.1rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} /> Action Required: Low Performers
+            </h3>
+            <span style={{ fontSize: '0.8rem', color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' }}>
+                {data?.length || 0} Students
+            </span>
+        </div>
+
+        {(!data || data.length === 0) ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                No low performers found.
+            </div>
+        ) : (
+            <div style={{ overflowX: 'auto' }}>
+                <table className={styles.table} style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '2px solid #f1f5f9' }}>
+                            <th style={{ textAlign: 'left', padding: '0.75rem', color: '#64748b', fontSize: '0.85rem' }}>Student</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem', color: '#64748b', fontSize: '0.85rem' }}>Dept</th>
+                            <th style={{ textAlign: 'left', padding: '0.75rem', color: '#64748b', fontSize: '0.85rem' }}>Subject</th>
+                            <th style={{ textAlign: 'center', padding: '0.75rem', color: '#64748b', fontSize: '0.85rem' }}>Marks</th>
+                            <th style={{ textAlign: 'right', padding: '0.75rem', color: '#64748b', fontSize: '0.85rem' }}>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.map((item, index) => (
+                            <tr key={index} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <div style={{ fontWeight: '600', color: '#1e293b' }}>{item.student?.name}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.student?.regNo}</div>
+                                </td>
+                                <td style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.9rem' }}>{item.student?.department}</td>
+                                <td style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.9rem' }}>{item.subject?.code}</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ background: '#fee2e2', color: '#ef4444', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                        {item.marks}
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                                    <button style={{ border: '1px solid #e2e8f0', background: 'white', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#475569' }} onClick={() => alert(`Notifying mentor of ${item.student?.name}`)}>
+                                        Notify
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        )}
+    </div>
+));

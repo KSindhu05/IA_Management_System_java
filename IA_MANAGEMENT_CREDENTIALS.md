@@ -4,29 +4,29 @@
 
 | Role | Username | Password | Notes |
 | :--- | :--- | :--- | :--- |
-| **Principal** | `principal` | `password` | Full Access |
-| **HOD (Computer Science)** | `hod_cs` | `password` | Department Head Access |
+| **Principal** | `PRINCIPAL` | `password` | Full Access (Admin) |
+| **HOD (Computer Science)** | `HOD001` | `password` | Department Head Access (MD Jaffar) |
 
 ## Faculty Roles
 
-| Role | Username | Password | Department |
-| :--- | :--- | :--- | :--- |
-| **Maths Faculty** | `faculty_maths` | `password` | Maths Dept |
-| **CS Faculty** | `faculty_cs` | `password` | Computer Science Dept |
+| Role | Username | Password | Name | Subjects |
+| :--- | :--- | :--- | :--- | :--- |
+| **Faculty 1** | `FAC001` | `password` | Miss Manju Sree | Engineering Maths-II |
+| **Faculty 2** | `FAC002` | `password` | Ramesh Gouda | CAEG |
+| **Faculty 3** | `FAC003` | `password` | Wahida Banu | Python, Indian Constitution |
+| **Faculty 4** | `FAC004` | `password` | Nasrin Banu | English Communication |
 
-## Student Logins (Sample)
+## Student Logins
 
 All student passwords are set to `password` by default.
 
-| Name | Reg Number (Username) | Password |
-| :--- | :--- | :--- |
-| A KAVITHA | `459CS25001` | `password` |
-| ABHISHEKA | `459CS25002` | `password` |
-| ADARSH REDDY G | `459CS25003` | `password` |
-| AGASARA KEERTHANA | `459CS25004` | `password` |
-| AKHIL S | `459CS25005` | `password` |
-| AKULA SHASHI KUMAR | `459CS25006` | `password` |
-| ANAPA LEELA LASYA | `459CS25007` | `password` |
-| ... and so on up to | `459CS25063` | `password` |
+**Total Students:** 63 (Range `459CS25001` - `459CS25063`)
 
-> **Note:** If `password` does not work for students, try `123` (DataInitializer default). However, the latest fix sets it to `password`.
+| Name | Reg Number (Username) | Password | Section | Verified |
+| :--- | :--- | :--- | :--- | :--- |
+| **A KAVITHA** | `459CS25001` | `password` | A | ✅ |
+| **Student 2** | `459CS25002` | `password` | A | ✅ |
+| **...** | ... | ... | ... | ... |
+| **Student 63** | `459CS25063` | `password` | A | ✅ |
+
+> **Note:** The default password for all users is `password`.

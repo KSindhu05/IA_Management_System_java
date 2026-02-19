@@ -1,0 +1,180 @@
+﻿WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.fusesource.jansi.internal.JansiLoader in an unnamed module (file:/C:/Users/hp/.m2/wrapper/dists/apache-maven-3.9.6/lib/jansi-2.4.0.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/C:/Users/hp/.m2/wrapper/dists/apache-maven-3.9.6/lib/guava-32.0.1-jre.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------< com.example:ia-management-backend >------------------
+[INFO] Building ia-management-backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ ia-management-backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ ia-management-backend ---
+[INFO] Changes detected - recompiling the module! :input tree
+[INFO] Compiling 43 source files with javac [debug release 17] to target\classes
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[56,18] cannot find symbol
+  symbol:   method setUser(com.example.ia.entity.User)
+  location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[57,18] cannot find symbol
+  symbol:   method setMessage(java.lang.String)
+  location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[58,18] cannot find symbol
+  symbol:   method setType(java.lang.String)
+  location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[59,18] cannot find symbol
+  symbol:   method setCategory(java.lang.String)
+  location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/MarksController.java:[107,41] cannot find symbol
+  symbol:   method getSubjectId()
+  location: variable request of type com.example.ia.controller.MarksController.UnlockRequest
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/MarksController.java:[107,65] cannot find symbol
+  symbol:   method getIaType()
+  location: variable request of type com.example.ia.controller.MarksController.UnlockRequest
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[81,12] cannot find symbol
+  symbol:   method setSubject(com.example.ia.entity.Subject)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[82,12] cannot find symbol
+  symbol:   method setFaculty(com.example.ia.entity.User)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[83,12] cannot find symbol
+  symbol:   method setCieNumber(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[84,12] cannot find symbol
+  symbol:   method setScheduledDate(data.conta[...]ys(7))
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[86,12] cannot find symbol
+  symbol:   method setStartTime(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[87,12] cannot find symbol
+  symbol:   method setDurationMinutes(int)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[89,12] cannot find symbol
+  symbol:   method setExamRoom(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[90,12] cannot find symbol
+  symbol:   method setStatus(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[106,62] cannot find symbol
+  symbol:   method getCieNumber()
+  location: variable a of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[147,12] cannot find symbol
+  symbol:   method setSubject(com.example.ia.entity.Subject)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[148,12] cannot find symbol
+  symbol:   method setFaculty(com.example.ia.entity.User)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[149,12] cannot find symbol
+  symbol:   method setCieNumber(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[150,12] cannot find symbol
+  symbol:   method setScheduledDate(data.conta[...]ys(7))
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[152,12] cannot find symbol
+  symbol:   method setStartTime(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[153,12] cannot find symbol
+  symbol:   method setDurationMinutes(int)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[155,12] cannot find symbol
+  symbol:   method setExamRoom(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[156,12] cannot find symbol
+  symbol:   method setStatus(java.lang.String)
+  location: variable ann of type com.example.ia.entity.Announcement
+[INFO] 23 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  2.770 s
+[INFO] Finished at: 2026-02-14T15:15:33+05:30
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project ia-management-backend: Compilation failure: Compilation failure: 
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[56,18] cannot find symbol
+[ERROR]   symbol:   method setUser(com.example.ia.entity.User)
+[ERROR]   location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[57,18] cannot find symbol
+[ERROR]   symbol:   method setMessage(java.lang.String)
+[ERROR]   location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[58,18] cannot find symbol
+[ERROR]   symbol:   method setType(java.lang.String)
+[ERROR]   location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/NotificationController.java:[59,18] cannot find symbol
+[ERROR]   symbol:   method setCategory(java.lang.String)
+[ERROR]   location: variable notif of type com.example.ia.entity.Notification
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/MarksController.java:[107,41] cannot find symbol
+[ERROR]   symbol:   method getSubjectId()
+[ERROR]   location: variable request of type com.example.ia.controller.MarksController.UnlockRequest
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/MarksController.java:[107,65] cannot find symbol
+[ERROR]   symbol:   method getIaType()
+[ERROR]   location: variable request of type com.example.ia.controller.MarksController.UnlockRequest
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[81,12] cannot find symbol
+[ERROR]   symbol:   method setSubject(com.example.ia.entity.Subject)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[82,12] cannot find symbol
+[ERROR]   symbol:   method setFaculty(com.example.ia.entity.User)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[83,12] cannot find symbol
+[ERROR]   symbol:   method setCieNumber(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[84,12] cannot find symbol
+[ERROR]   symbol:   method setScheduledDate(data.conta[...]ys(7))
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[86,12] cannot find symbol
+[ERROR]   symbol:   method setStartTime(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[87,12] cannot find symbol
+[ERROR]   symbol:   method setDurationMinutes(int)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[89,12] cannot find symbol
+[ERROR]   symbol:   method setExamRoom(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[90,12] cannot find symbol
+[ERROR]   symbol:   method setStatus(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[106,62] cannot find symbol
+[ERROR]   symbol:   method getCieNumber()
+[ERROR]   location: variable a of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[147,12] cannot find symbol
+[ERROR]   symbol:   method setSubject(com.example.ia.entity.Subject)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[148,12] cannot find symbol
+[ERROR]   symbol:   method setFaculty(com.example.ia.entity.User)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[149,12] cannot find symbol
+[ERROR]   symbol:   method setCieNumber(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[150,12] cannot find symbol
+[ERROR]   symbol:   method setScheduledDate(data.conta[...]ys(7))
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[152,12] cannot find symbol
+[ERROR]   symbol:   method setStartTime(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[153,12] cannot find symbol
+[ERROR]   symbol:   method setDurationMinutes(int)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[155,12] cannot find symbol
+[ERROR]   symbol:   method setExamRoom(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] /D:/IA_Management_system/backend-springboot/src/main/java/com/example/ia/controller/CieController.java:[156,12] cannot find symbol
+[ERROR]   symbol:   method setStatus(java.lang.String)
+[ERROR]   location: variable ann of type com.example.ia.entity.Announcement
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

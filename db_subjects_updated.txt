@@ -1,0 +1,9 @@
+﻿name	department	semester	instructor_name
+Engineering Maths-II	CSE	2	Miss Manju Sree
+English Communication	CSE	2	Nasrin Banu
+CAEG	CSE	2	Ramesh Gouda
+Python	CSE	2	Wahida Banu
+Indian Constitution	CSE	2	Wahida Banu
+DBMS	CSE	2	Prof. Test Faculty
+Operating Systems	CSE	2	Prof. Other
+Software Engineering	CSE	2	Prof. Test Faculty

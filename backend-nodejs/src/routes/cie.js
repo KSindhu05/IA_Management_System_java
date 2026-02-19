@@ -10,18 +10,35 @@ const { Op } = require('sequelize');
 // For now, fetching all announcements for subjects the student is enrolled in would be ideal.
 // But we might need a relation between Student and Subject (Enrollment).
 // Assuming valid student for now.
+// Get Student Announcements (Filtered by Department & Semester)
 router.get('/student/announcements', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const studentRegNo = req.user.username;
+        const student = await Student.findOne({ where: { regNo: studentRegNo } });
 
-        // Todo: Filter by student's subjects. For now, fetch all active announcements.
-        // In a real app, we'd query Enrollment table.
+        if (!student) {
+            // Fallback if student profile is missing (shouldn't happen for valid users)
+            return res.json([]);
+        }
+
+        // Find subjects for this student's department and semester
+        // Note: In a real system, we'd check an Enrollment table. 
+        // Here we assume all students in a sem/dept take the same subjects.
+        const subjects = await Subject.findAll({
+            where: {
+                department: student.department,
+                semester: student.semester
+            },
+            attributes: ['id']
+        });
+
+        const subjectIds = subjects.map(s => s.id);
+
         const announcements = await Announcement.findAll({
             where: {
                 status: 'SCHEDULED',
-                scheduledDate: {
-                    [Op.gte]: today // Only show pending or future exams
+                subjectId: {
+                    [Op.in]: subjectIds
                 }
             },
             include: [
@@ -41,6 +58,7 @@ router.get('/student/announcements', authMiddleware, roleMiddleware('STUDENT'), 
             durationMinutes: a.durationMinutes,
             examRoom: a.examRoom,
             instructions: a.instructions,
+            syllabusCoverage: a.syllabusCoverage, // Added field
             faculty: a.faculty ? a.faculty.username : 'Unknown'
         }));
 
@@ -51,6 +69,7 @@ router.get('/student/announcements', authMiddleware, roleMiddleware('STUDENT'), 
     }
 });
 
+// Get Student Notifications (Based on their subjects and marks)
 // Get Student Notifications (Based on their subjects and marks)
 router.get('/student/notifications', authMiddleware, roleMiddleware('STUDENT'), async (req, res) => {
     try {
@@ -65,52 +84,98 @@ router.get('/student/notifications', authMiddleware, roleMiddleware('STUDENT'), 
             ]);
         }
 
-        // Find student's subjects through their marks using studentId
+        const notifications = [];
+        let notifId = 1;
+
+        // 1. Get Exam Schedule Notifications (Announcements)
+        // Find subjects for this student's department and semester
+        const subjects = await Subject.findAll({
+            where: {
+                department: student.department,
+                semester: student.semester
+            },
+            attributes: ['id', 'name']
+        });
+        const subjectIds = subjects.map(s => s.id);
+
+        if (subjectIds.length > 0) {
+            const announcements = await Announcement.findAll({
+                where: {
+                    status: 'SCHEDULED',
+                    subjectId: { [Op.in]: subjectIds }
+                },
+                include: [{ model: Subject, attributes: ['name'] }],
+                order: [['createdAt', 'DESC']],
+                limit: 5
+            });
+
+            announcements.forEach(ann => {
+                notifications.push({
+                    id: notifId++,
+                    message: `CIE-${ann.cieNumber} for ${ann.Subject ? ann.Subject.name : 'Unknown'} is scheduled on ${ann.scheduledDate}`,
+                    type: 'EXAM_SCHEDULE',
+                    isRead: false,
+                    createdAt: ann.createdAt || new Date()
+                });
+            });
+        }
+
+        // 2. Get Marks Uploaded Notifications
         const studentMarks = await CIEMark.findAll({
             where: { studentId: student.id },
             include: [
                 { model: Subject, as: 'subject', attributes: ['name', 'code', 'id'] }
             ],
-            order: [['id', 'DESC']],
+            order: [['id', 'DESC']], // Use id as fallback for recent changes since timestamps are disabled
             limit: 10
         });
 
-        if (!studentMarks || studentMarks.length === 0) {
-            return res.json([
-                { id: 1, message: 'Welcome to the IA Management System!', type: 'INFO', isRead: false, createdAt: new Date() }
-            ]);
-        }
-
-        // Get unique subjects
-        const subjectSet = new Set();
-        const notifications = [];
-        let notifId = 1;
-
-        studentMarks.forEach(mark => {
-            if (mark.subject && !subjectSet.has(mark.subject.id)) {
-                subjectSet.add(mark.subject.id);
-
-                // Create notification for recent mark upload
-                notifications.push({
-                    id: notifId++,
-                    message: `${mark.cieType} marks for ${mark.subject.name} have been uploaded`,
-                    type: 'CIE_ANNOUNCEMENT',
-                    isRead: false,
-                    createdAt: mark.createdAt || new Date()
-                });
-            }
-        });
-
-        // If no notifications, add welcome message
-        if (notifications.length === 0) {
-            notifications.push({
-                id: 1,
-                message: 'Welcome to the IA Management System!',
-                type: 'INFO',
-                isRead: false,
-                createdAt: new Date()
+        if (studentMarks && studentMarks.length > 0) {
+            const subjectSet = new Set();
+            studentMarks.forEach(mark => {
+                // Generate a notification for each recent mark update or unique subject entry
+                // Simplification: identifying unique updates might require better audit logs. 
+                // For now, we notify about the existence of marks.
+                if (mark.subject && !subjectSet.has(`${mark.subject.id}-${mark.cieType}`)) {
+                    subjectSet.add(`${mark.subject.id}-${mark.cieType}`);
+                    notifications.push({
+                        id: notifId++,
+                        message: `${mark.cieType} marks for ${mark.subject.name} have been updated`,
+                        type: 'MARKS_UPDATE',
+                        isRead: false,
+                        createdAt: mark.updatedAt || new Date()
+                    });
+                }
             });
         }
+
+
+        // 3. Get General Notifications (HOD/Faculty Messages)
+        const generalNotifications = await Notification.findAll({
+            where: {
+                [Op.or]: [
+                    { userId: req.user.id }, // Corrected: Use User.id (from token) as Notifications are linked to User table
+                    { category: 'BROADCAST' } // Global/Department Broadcasts
+                ]
+            },
+            order: [['createdAt', 'DESC']],
+            limit: 10
+        });
+
+        generalNotifications.forEach(n => {
+            notifications.push({
+                id: notifId++,
+                message: n.message,
+                type: n.type === 'ALERT' ? 'ALERT' : 'INFO', // Map to frontend types
+                isRead: n.isRead,
+                createdAt: n.createdAt
+            });
+        });
+
+
+
+        // Sort by date descending
+        notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(notifications);
     } catch (error) {
@@ -151,16 +216,56 @@ router.get('/faculty/announcements/details', authMiddleware, roleMiddleware('FAC
 });
 
 // Get Faculty Notifications
+// Get Faculty Notifications
 router.get('/faculty/notifications', authMiddleware, roleMiddleware('FACULTY'), async (req, res) => {
     try {
         const facultyId = req.user.id;
         const { limit = 20 } = req.query;
 
-        const notifications = await Notification.findAll({
+        const notifications = [];
+        let notifId = 1;
+
+        // 1. Get CIE Schedule Notifications (Announcements)
+        // Fetch announcements for subjects in the faculty's department (or all for now)
+        // Ideally we filter by subjects the faculty teaches, but for now showing all scheduled is safer visibility.
+        const announcements = await Announcement.findAll({
+            where: { status: 'SCHEDULED' },
+            include: [{ model: Subject, attributes: ['name', 'code'] }],
+            order: [['createdAt', 'DESC']],
+            limit: 5
+        });
+
+        announcements.forEach(ann => {
+            notifications.push({
+                id: notifId++,
+                message: `CIE-${ann.cieNumber} for ${ann.Subject ? ann.Subject.name : 'Unknown'} is scheduled on ${ann.scheduledDate}`,
+                type: 'INFO', // 'info' maps to Bell icon in frontend
+                category: 'EXAM SCHEDULE',
+                isRead: false,
+                createdAt: ann.createdAt || new Date()
+            });
+        });
+
+        // 2. Get Standard Notifications
+        const dbNotifications = await Notification.findAll({
             where: { userId: facultyId },
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit)
         });
+
+        dbNotifications.forEach(n => {
+            notifications.push({
+                id: notifId++, // Re-indexing to avoid collisions if necessary, or use UUIDs in real app
+                message: n.message,
+                type: n.type === 'ALERT' ? 'ALERT' : 'INFO',
+                category: 'GENERAL',
+                isRead: n.isRead,
+                createdAt: n.createdAt
+            });
+        });
+
+        // Sort combined list
+        notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         res.json(notifications);
     } catch (error) {

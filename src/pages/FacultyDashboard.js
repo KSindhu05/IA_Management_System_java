@@ -2,9 +2,20 @@ import React, { useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import API_BASE_URL from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Edit, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, FilePlus, Save, AlertCircle, Phone, FileText, CheckCircle, Search, Filter, Mail, X, Download, Clock, BarChart2, TrendingDown, Award, ClipboardList, AlertTriangle, Edit3, Edit, Calendar, UserCheck, BookOpen, Upload, Megaphone, Lock, Bell, MapPin, Trash2 } from 'lucide-react';
 import { facultyData, facultyProfiles, facultySubjects, studentsList, labSchedule, getMenteesForFaculty } from '../utils/mockData';
 import styles from './FacultyDashboard.module.css';
+
+
+
+const calculateGradeFromPercentage = (percentage) => {
+    if (percentage >= 90) return 'S';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    if (percentage >= 50) return 'D';
+    return 'F';
+};
 
 const FacultyDashboard = () => {
     const { user } = useAuth();
@@ -12,27 +23,61 @@ const FacultyDashboard = () => {
     const [selectedSubject, setSelectedSubject] = useState(null);
     const [marks, setMarks] = useState({}); // Map { studentId: { co1: val... } }
     const [isLocked, setIsLocked] = useState(false); // For Commit/Edit workflow
+    const [cieLockStatus, setCieLockStatus] = useState({ cie1: false, cie2: false, cie3: false, cie4: false, cie5: false }); // Per-CIE lock
     const [saving, setSaving] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [searchTerm, setSearchTerm] = useState('');
 
     // Notification State
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [myAnnouncements, setMyAnnouncements] = useState([]);
     const [publishedSchedules, setPublishedSchedules] = useState([]); // CIE schedules published by HOD
 
     // API State
     const [subjects, setSubjects] = useState([]);
     const [students, setStudents] = useState([]);
+    const [allStudentMarks, setAllStudentMarks] = useState({}); // { subjectId: { studentId: { ...marks } } }
     const API_BASE = `${API_BASE_URL}/marks`;
     const [facultyClassAnalytics, setFacultyClassAnalytics] = useState({
         evaluated: 0,
         pending: 0,
         avgScore: 0,
         lowPerformers: 0,
-        topPerformers: 0
+        topPerformers: 0,
+        lowPerformersList: []
     });
+
+    // Mentorship State
+    const [menteeIds, setMenteeIds] = useState(() => {
+        const saved = localStorage.getItem(`mentees_${user?.id}`);
+        if (saved) return JSON.parse(saved);
+
+        // Default IDs from the image (459CS25001 - 459CS25007 precisely)
+        const defaultRegs = ['459CS25001', '459CS25002', '459CS25003', '459CS25005', '459CS25007'];
+        const foundIds = students
+            .filter(s => defaultRegs.includes(s.regNo) || defaultRegs.includes(s.rollNo))
+            .map(s => s.id);
+
+        return foundIds.length > 0 ? foundIds : [];
+    });
+    const [showMenteeModal, setShowMenteeModal] = useState(false);
+    const [menteeSearchTerm, setMenteeSearchTerm] = useState('');
+    const [manualMentees, setManualMentees] = useState(() => {
+        const saved = localStorage.getItem(`manual_mentees_${user?.id}`);
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [newStudentForm, setNewStudentForm] = useState({
+        regNo: '',
+        name: '',
+        parentPhone: '',
+        avgMark: ''
+    });
+    const [modalTab, setModalTab] = useState('select'); // 'select' or 'manual'
+
+    // -- Edit Student State --
+    const [editingStudent, setEditingStudent] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
 
     // Verify Faculty
     const currentFaculty = facultyProfiles.find(f => f.id === user?.id) || facultyData;
@@ -45,11 +90,109 @@ const FacultyDashboard = () => {
         }))
         : facultySubjects.filter(sub => sub.instructorId === currentFaculty.id);
 
-    // Filter Mentees
-    const myMentees = getMenteesForFaculty(currentFaculty.id);
+    // Derived Mentees
+    const myMentees = students.filter(s => menteeIds.includes(s.id)).map(s => {
+        return { ...s };
+    });
 
-    // Filter Defaulters (Attendance < 75%)
-    const attendanceDefaulters = studentsList.filter(s => s.attendance < 75);
+    const handleAddMentee = (studentId) => {
+        if (menteeIds.includes(studentId)) {
+            showToast('Student already in mentorship list', 'warning');
+            return;
+        }
+        const newIds = [...menteeIds, studentId];
+        setMenteeIds(newIds);
+        localStorage.setItem(`mentees_${user?.id}`, JSON.stringify(newIds));
+        showToast('Mentee added successfully');
+        setShowMenteeModal(false);
+    };
+
+    const handleAddManualStudent = (e) => {
+        e.preventDefault();
+        const newStudent = {
+            id: `manual_${Date.now()}`,
+            ...newStudentForm,
+            isManual: true
+        };
+        const newList = [...manualMentees, newStudent];
+        setManualMentees(newList);
+        localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        setNewStudentForm({ regNo: '', name: '', parentPhone: '', avgMark: '' });
+        setShowMenteeModal(false);
+        showToast('Student added successfully');
+    };
+
+    const handleRemoveMentee = (studentId) => {
+        if (typeof studentId === 'string' && studentId.startsWith('manual_')) {
+            const newList = manualMentees.filter(m => m.id !== studentId);
+            setManualMentees(newList);
+            localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        } else {
+            const newIds = menteeIds.filter(id => id !== studentId);
+            setMenteeIds(newIds);
+            localStorage.setItem(`mentees_${user?.id}`, JSON.stringify(newIds));
+        }
+        showToast('Mentee removed', 'info');
+    };
+
+    const handleEditStudent = (student) => {
+        setEditingStudent({ ...student });
+        setShowEditModal(true);
+    };
+
+    const handleUpdateStudent = (e) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+
+        // Update in Manual List
+        if (editingStudent.isManual) {
+            const newList = manualMentees.map(m => m.id === editingStudent.id ? editingStudent : m);
+            setManualMentees(newList);
+            localStorage.setItem(`manual_mentees_${user?.id}`, JSON.stringify(newList));
+        } else {
+            // Update in Real List (Local State)
+            const newStudents = students.map(s => s.id === editingStudent.id ? { ...s, ...editingStudent } : s);
+            setStudents(newStudents);
+
+            // --- GLOBAL SYNC: Save to localStorage for other dashboards ---
+            const globalUpdates = JSON.parse(localStorage.getItem('global_student_updates') || '{}');
+            globalUpdates[editingStudent.id] = {
+                name: editingStudent.name,
+                regNo: editingStudent.regNo,
+                parentPhone: editingStudent.parentPhone,
+                // Add other fields if needed
+            };
+            localStorage.setItem('global_student_updates', JSON.stringify(globalUpdates));
+        }
+
+        showToast('Student details updated');
+        setShowEditModal(false);
+        setEditingStudent(null);
+    };
+
+
+
+    // Fetch Analytics helper
+    const fetchAnalytics = React.useCallback(async () => {
+        if (!user || !user.token) return;
+        try {
+            const headers = { 'Authorization': `Bearer ${user.token}` };
+            const anRes = await fetch(`${API_BASE_URL}/faculty/analytics`, { headers });
+            if (anRes.ok) {
+                const data = await anRes.json();
+                setFacultyClassAnalytics(data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch analytics", e);
+        }
+    }, [user, API_BASE_URL]);
+
+    // Refresh analytics when switching to Low Performers tab
+    React.useEffect(() => {
+        if (activeSection === 'Low Performers') {
+            fetchAnalytics();
+        }
+    }, [activeSection, fetchAnalytics]);
 
     React.useEffect(() => {
         if (!user || !user.token) return;
@@ -88,20 +231,12 @@ const FacultyDashboard = () => {
                 console.error("Failed to fetch subjects", e);
             }
 
-            // Fetch Analytics
-            try {
-                const anRes = await fetch(`${API_BASE_URL}/faculty/analytics`, { headers });
-                if (anRes.ok) {
-                    const data = await anRes.json();
-                    setFacultyClassAnalytics(data);
-                }
-            } catch (e) {
-                console.error("Failed to fetch analytics", e);
-            }
+            // Fetch Analytics (Initial Load)
+            fetchAnalytics();
 
             // Fetch Notifications
             try {
-                const notifRes = await fetch(`${API_BASE_URL}/api/cie/faculty/notifications`, { headers });
+                const notifRes = await fetch(`${API_BASE_URL}/notifications`, { headers });
                 if (notifRes.ok) {
                     const notifs = await notifRes.json();
                     setNotifications(notifs);
@@ -111,16 +246,7 @@ const FacultyDashboard = () => {
                 console.error("Failed to fetch notifications", e);
             }
 
-            // Fetch My Announcements
-            try {
-                const annRes = await fetch(`${API_BASE_URL}/api/cie/faculty/announcements/list`, { headers });
-                if (annRes.ok) {
-                    const anns = await annRes.json();
-                    setMyAnnouncements(anns);
-                }
-            } catch (e) {
-                console.error("Failed to fetch announcements", e);
-            }
+
 
             // Fetch Published CIE Schedules (from HOD)
             try {
@@ -132,104 +258,106 @@ const FacultyDashboard = () => {
             } catch (e) {
                 console.error("Failed to fetch published schedules", e);
             }
+
+            // Fetch Marks for all subjects (for analytics and proctoring)
+            try {
+                // We need to fetch marks for all subjects this faculty handles
+                // Since we don't have the subjects list fully ready here (async), 
+                // we might need to rely on the 'my-subjects' response or fetch all marks for faculty.
+                // Assuming there's an endpoint or we iterate.
+                // For now, let's try to fetch marks for the subjects we just fetched.
+
+                // Correction: We can't easily access 'data' from subRes here without restructuring.
+                // Let's blindly fetch marks for all subjects if we can, or just wait for user to select.
+                // But 'myStudents' needs marks.
+
+                // Workaround: Fetch all marks for faculty's subjects.
+                // If API supports it: GET /faculty/all-marks
+                // If not, we iterate.
+
+                // Let's assume we can fetch marks for each subject.
+                const subRes = await fetch(`${API_BASE_URL}/faculty/my-subjects`, { headers });
+                if (subRes.ok) {
+                    const subs = await subRes.json();
+                    const marksMap = {};
+
+                    await Promise.all(subs.map(async (sub) => {
+                        try {
+                            const mRes = await fetch(`${API_BASE_URL}/marks/subject/${sub.id}`, { headers });
+                            if (mRes.ok) {
+                                const mData = await mRes.json();
+                                // Transform to { studentId: marks }
+                                const subMarks = {};
+                                mData.forEach(m => {
+                                    if (!subMarks[m.studentId]) {
+                                        subMarks[m.studentId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
+                                    }
+                                    const key = m.cieType ? m.cieType.toLowerCase() : (m.iaType ? m.iaType.toLowerCase() : null);
+                                    if (key) {
+                                        subMarks[m.studentId][key] = m.totalScore || '';
+                                        // Also store status if needed? The table logic doesn't use status per se, just scores.
+                                        // But wait, the helper `getStudentPerformance` uses `sMarks.cie1` etc.
+                                    }
+                                });
+                                marksMap[sub.id] = subMarks;
+                            }
+                        } catch (e) {
+                            console.error(`Failed to fetch marks for subject ${sub.id}`, e);
+                        }
+                    }));
+                    setAllStudentMarks(marksMap);
+                }
+            } catch (e) {
+                console.error("Failed to fetch all student marks", e);
+            }
+
         };
-
         fetchInitialData();
-        // Fallback or initialization of mock data if needed removed as we prefer API
-    }, [user]);
 
-    // -- Global Marks State for Real-time Updates --
-    const [allStudentMarks, setAllStudentMarks] = useState({}); // { subjectId: { studentId: { cie1, cie2 } } }
+    }, [user, fetchAnalytics]);
+
+    // Helper to get real performance data for a student
+    const getStudentPerformance = (studentId) => {
+        let totalPerformance = 0;
+        let subjectCount = 0;
+        let hasData = false;
+
+        Object.keys(allStudentMarks).forEach(subId => {
+            const sMarks = allStudentMarks[subId][studentId];
+            if (sMarks) {
+                hasData = true;
+                const scores = [sMarks.cie1, sMarks.cie2, sMarks.cie3, sMarks.cie4, sMarks.cie5]
+                    .filter(x => x !== '' && x !== 'Ab' && x !== undefined && x !== null)
+                    .map(Number);
+
+                if (scores.length > 0) {
+                    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+                    // Normalized to 100 (assuming CIE max is 50)
+                    const percent = (avg / 50) * 100;
+                    totalPerformance += percent;
+                    subjectCount++;
+                }
+            }
+        });
+
+        const finalPercentage = subjectCount > 0 ? (totalPerformance / subjectCount) : 0;
+        const grade = hasData ? calculateGradeFromPercentage(finalPercentage) : 'N/A';
+
+        return { grade, hasData, percentage: finalPercentage };
+    };
 
     // -- Enhancement State --
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [showUploadModal, setShowUploadModal] = useState(false);
+
+    // Low Performer Filters
+    const [filterSubject, setFilterSubject] = useState('All');
+    const [filterCIE, setFilterCIE] = useState('All');
     const [showFilterMenu, setShowFilterMenu] = useState(false);
     const [selectedGradeFilter, setSelectedGradeFilter] = useState('All');
 
-    // -- Attendance State --
-    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-    const [attendanceData, setAttendanceData] = useState({}); // { subjectId-date: { studentId: 'Present'/'Absent' } }
-    const [savedAttendance, setSavedAttendance] = useState(false);
 
-    const handleAttendanceChange = (studentId, status) => {
-        if (!selectedSubject) return;
-        const key = `${selectedSubject.id}-${attendanceDate}`;
-        setAttendanceData(prev => ({
-            ...prev,
-            [key]: {
-                ...prev[key],
-                [studentId]: status
-            }
-        }));
-        setSavedAttendance(false);
-    };
-
-    const saveAttendance = async () => {
-        if (!selectedSubject) return;
-        setSaving(true);
-        try {
-            const classStudents = students.filter(s => s.semester === selectedSubject.semester);
-            const key = `${selectedSubject.id}-${attendanceDate}`;
-            const currentData = attendanceData[key] || {};
-
-            const records = classStudents.map(s => ({
-                studentId: s.id,
-                status: (currentData[s.id] || 'Present').toUpperCase()
-            }));
-
-            const token = user?.token;
-            const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
-
-            const res = await fetch(`${API_BASE_URL}/attendance/update`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    subjectId: selectedSubject.id,
-                    date: attendanceDate,
-                    records
-                })
-            });
-
-            if (res.ok) {
-                setSavedAttendance(true);
-                showToast('Attendance Saved Successfully!', 'success');
-            } else {
-                const txt = await res.text();
-                showToast('Failed: ' + txt, 'error');
-            }
-        } catch (e) {
-            console.error(e);
-            showToast('Error saving attendance', 'error');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // Fetch Attendance
-    React.useEffect(() => {
-        if (activeSection === 'Attendance' && selectedSubject && attendanceDate) {
-            const fetchAtt = async () => {
-                try {
-                    const token = user?.token;
-                    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                    const res = await fetch(`${API_BASE_URL}/attendance?subjectId=${selectedSubject.id}&date=${attendanceDate}`, { headers });
-                    if (res.ok) {
-                        const data = await res.json();
-                        // data is list { studentId, status }
-                        const map = {};
-                        data.forEach(r => { map[r.studentId] = r.status === 'PRESENT' ? 'Present' : 'Absent'; });
-
-                        const key = `${selectedSubject.id}-${attendanceDate}`;
-                        setAttendanceData(prev => ({ ...prev, [key]: map }));
-                        setSavedAttendance(true);
-                    }
-                } catch (e) { console.error(e); }
-            };
-            fetchAtt();
-        }
-    }, [activeSection, selectedSubject, attendanceDate]);
 
     // -- Syllabus State --
     const [lessonPlanData, setLessonPlanData] = useState(() => {
@@ -305,7 +433,9 @@ const FacultyDashboard = () => {
             });
 
             if (response.ok) {
-                const data = await response.json();
+                const result = await response.json();
+                const data = Array.isArray(result) ? result[0] : result; // Handle List response
+
                 if (data) {
                     setIaConfig(prev => ({
                         ...prev,
@@ -335,8 +465,8 @@ const FacultyDashboard = () => {
             return;
         }
 
-        if (!iaConfig.date) {
-            showToast('CIE has not been scheduled by HOD yet.', 'error');
+        if (!iaConfig.syllabus || !iaConfig.syllabus.trim()) {
+            showToast('Please enter syllabus topics', 'error');
             return;
         }
 
@@ -347,31 +477,43 @@ const FacultyDashboard = () => {
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             };
 
-            const baseUrl = API_BASE.replace('/marks', '');
-
             const payload = {
+                subjectId: iaConfig.subjectId,
                 cieNumber: parseInt(iaConfig.cieNumber),
-                scheduledDate: iaConfig.date || null, // Allow null if not set
-                durationMinutes: parseInt(iaConfig.duration) || 60,
-                syllabusCoverage: iaConfig.syllabus,
-                instructions: iaConfig.instructions,
-                examRoom: iaConfig.room,
-                startTime: iaConfig.time || null
+                syllabusCoverage: iaConfig.syllabus
             };
 
-            const response = await fetch(`${API_BASE_URL}/cie/faculty/announcements?subjectId=${iaConfig.subjectId}`, {
-                method: 'POST',
+            const response = await fetch(`${API_BASE_URL}/cie/faculty/announcements/syllabus`, {
+                method: 'PUT',
                 headers,
                 body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                showToast(`CIE-${iaConfig.cieNumber} Updated Successfully!`, 'success');
+                const updatedAnn = await response.json();
+
+                // Update local state to reflect the syllabus change
+                setPublishedSchedules(prev => {
+                    const ann = updatedAnn.announcement || updatedAnn;
+                    if (!ann || !ann.id) return prev;
+
+                    const existingIndex = prev.findIndex(s => s.id === ann.id);
+                    if (existingIndex >= 0) {
+                        const newScheds = [...prev];
+                        newScheds[existingIndex] = { ...newScheds[existingIndex], ...ann };
+                        return newScheds;
+                    }
+                    return prev; // Don't add new — only update existing
+                });
+
+                showToast(`Syllabus for CIE-${iaConfig.cieNumber} Updated!`, 'success');
             } else {
-                showToast('Failed to post announcement', 'error');
+                const err = await response.json().catch(() => ({ message: 'Failed to update syllabus' }));
+                showToast(err.message || 'Failed to update syllabus', 'error');
             }
         } catch (error) {
-            showToast('Failed to post announcement', 'error');
+            console.error(error);
+            showToast('Failed to update syllabus', 'error');
         }
     };
 
@@ -457,16 +599,24 @@ const FacultyDashboard = () => {
         {
             label: 'CIE Schedule',
             path: '/dashboard/faculty',
-            icon: <Calendar size={20} />, // Changed icon for relevance
+            icon: <Calendar size={20} />,
             isActive: activeSection === 'CIE Schedule',
             onClick: () => { setActiveSection('CIE Schedule'); setSelectedSubject(null); }
         },
+
         {
-            label: 'Proctoring',
+            label: 'Mentorship',
             path: '/dashboard/faculty',
             icon: <UserCheck size={20} />,
-            isActive: activeSection === 'Proctoring',
-            onClick: () => { setActiveSection('Proctoring'); setSelectedSubject(null); }
+            isActive: activeSection === 'Mentorship',
+            onClick: () => { setActiveSection('Mentorship'); setSelectedSubject(null); }
+        },
+        {
+            label: 'Low Performers',
+            path: '/dashboard/faculty',
+            icon: <AlertTriangle size={20} />,
+            isActive: activeSection === 'Low Performers',
+            onClick: () => { setActiveSection('Low Performers'); setSelectedSubject(null); }
         },
         {
             label: 'Notifications',
@@ -474,13 +624,6 @@ const FacultyDashboard = () => {
             icon: <Bell size={20} />,
             isActive: activeSection === 'Notifications',
             onClick: () => { setActiveSection('Notifications'); setSelectedSubject(null); }
-        },
-        {
-            label: 'My Announcements',
-            path: '/dashboard/faculty',
-            icon: <Megaphone size={20} />,
-            isActive: activeSection === 'My Announcements',
-            onClick: () => { setActiveSection('My Announcements'); setSelectedSubject(null); }
         },
     ];
 
@@ -496,6 +639,7 @@ const FacultyDashboard = () => {
         setActiveSection('CIE Entry');
         setMarks({}); // Clear previous
         setIsLocked(false);
+        setCieLockStatus({ cie1: false, cie2: false, cie3: false, cie4: false, cie5: false }); // All unlocked by default
 
         try {
             const token = user?.token;
@@ -511,25 +655,50 @@ const FacultyDashboard = () => {
                     newMarks[s.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
                 });
 
+                // Track per-CIE statuses to determine lock state
+                const cieStatuses = { cie1: new Set(), cie2: new Set(), cie3: new Set(), cie4: new Set(), cie5: new Set() };
+
+                console.log('--- FETCHED MARKS DEBUG ---');
+                console.log('Current Students Count:', students.length);
+                console.log('Fetched Marks Count:', data.length);
+
+                // Create a set of valid student IDs for filtering
+                const validStudentIds = new Set(students.map(s => s.id));
+
                 data.forEach(m => {
                     if (m.student && m.student.id) {
                         const sId = m.student.id;
+
+                        // CRITICAL FIX: Ignore marks for students not in the current list (phantom marks)
+                        if (!validStudentIds.has(sId)) return;
+
                         if (!newMarks[sId]) newMarks[sId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
 
-                        // Backend returns 'cieType' (e.g., 'CIE1'), not 'iaType'
-                        const key = (m.cieType || m.iaType || '').toLowerCase(); // cie1
-                        if (key) newMarks[sId][key] = m.totalScore || ''; // Use totalScore
+                        // Normalize key: CIE-1 -> cie1, CIE1 -> cie1
+                        const rawType = m.cieType || m.iaType;
+                        const key = rawType ? rawType.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : null;
+
+                        if (key && newMarks[sId]) {
+                            // Display logic: null/undefined = not entered (show empty)
+                            // 0 = faculty entered zero (show '0')
+                            const isNotEntered = m.marks === null || m.marks === undefined;
+                            const isPending = m.status === 'PENDING' || !m.status;
+                            const markVal = (isNotEntered && isPending) ? '' : (m.marks !== null && m.marks !== undefined ? m.marks : '');
+                            newMarks[sId][key] = markVal;
+                        }
+
+                        // Track status per CIE type
+                        if (key && cieStatuses[key]) {
+                            cieStatuses[key].add(m.status || 'PENDING');
+                        }
                     }
                 });
-                setMarks(newMarks);
-                // Check Status for Lock
-                const firstMark = data.find(m => m.status);
-                if (firstMark && (firstMark.status === 'SUBMITTED' || firstMark.status === 'APPROVED')) {
-                    setIsLocked(true);
-                    showToast(`Marks for this subject are ${firstMark.status}`, 'info');
-                } else {
-                    setIsLocked(false);
-                }
+
+                console.log('CIE Statuses:', cieStatuses);
+
+                // All CIEs are always editable (no lock logic)
+                setCieLockStatus({ cie1: false, cie2: false, cie3: false, cie4: false, cie5: false });
+                setIsLocked(false);
 
                 setMarks(newMarks);
             }
@@ -565,7 +734,7 @@ const FacultyDashboard = () => {
             setAllStudentMarks(prev => ({
                 ...prev,
                 [selectedSubject.id]: {
-                    ...prev[selectedSubject.id],
+                    ...prev[selectedSubject.id]?.[studentId],
                     [studentId]: {
                         ...prev[selectedSubject.id]?.[studentId],
                         [field]: numValue
@@ -622,84 +791,105 @@ const FacultyDashboard = () => {
         return "-";
     };
 
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            const token = user?.token;
-            const headers = {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            };
+    // Helper to prepare and save marks
+    const prepareAndSaveMarks = async () => {
+        const payload = [];
+        Object.keys(marks).forEach(studentId => {
+            const sMarks = marks[studentId];
+            ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(key => {
+                // Skip locked CIE types — nothing to save for those
+                if (cieLockStatus[key]) return;
 
-            const payload = [];
-            Object.keys(marks).forEach(studentId => {
-                const sMarks = marks[studentId];
-                ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(key => {
-                    const val = sMarks[key];
-                    // Only send if it has a value (ignoring 'Ab' or empty string for now, or sending 0?)
-                    // If 'Ab', maybe send 0? existing logic 'Ab' => 0.
-                    // But payload expects Double.
-                    // If the user entered value, we send it.
-                    if (val !== undefined) {
-                        let score = 0;
-                        if (val === 'Ab' || val === '') score = 0;
-                        else score = parseFloat(val);
+                const val = sMarks[key];
 
-                        // We should maybe only send if it's explicitly set? 
-                        // But for batch update, sending 0 is safer than not updating if it was previously set.
-                        // But we don't want to overwrite existing data with 0 if UI state is partial?
-                        // UI state `marks` is initialized with existing data in handleSubjectClick.
-                        // So it represents the COMPLETE desired state.
-                        // So sending everything is correct.
+                // If the field was cleared (empty string), send null to clear it in backend
+                if (val === '' || val === null || val === undefined) {
+                    payload.push({
+                        studentId: parseInt(studentId),
+                        subjectId: selectedSubject.id,
+                        iaType: key.toUpperCase(),
+                        co1: null,
+                        co2: 0
+                    });
+                    return;
+                }
 
-                        // Skip if purely undefined/null
-                        if (val === null || val === undefined) return;
+                let score = 0;
+                if (val === 'Ab') score = 0;
+                else score = parseFloat(val);
 
-                        payload.push({
-                            studentId: parseInt(studentId),
-                            subjectId: selectedSubject.id,
-                            iaType: key.toUpperCase(), // cie1 -> CIE1
-                            co1: score,
-                            co2: 0
-                        });
-                    }
+                if (isNaN(score) && val !== 'Ab') return;
+
+                payload.push({
+                    studentId: parseInt(studentId),
+                    subjectId: selectedSubject.id,
+                    iaType: key.toUpperCase(),
+                    co1: score,
+                    co2: 0
                 });
             });
+        });
 
-            if (payload.length === 0) {
-                showToast('No marks to save', 'info');
-                setSaving(false);
-                return;
-            }
+        if (payload.length === 0) return { success: true, message: 'No marks to save' };
 
+        try {
+            const token = user?.token;
+            const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
             const response = await fetch(`${API_BASE_URL}/marks/update/batch`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(payload)
             });
 
-            if (response.ok) {
-                showToast('Changes Committed & Locked!', 'success');
-                setIsLocked(true);
-            } else {
+            if (response.ok) return { success: true };
+            else {
                 const err = await response.text();
-                console.error(err);
-                showToast('Error saving marks: ' + err, 'error');
+                return { success: false, message: err };
             }
         } catch (e) {
             console.error(e);
-            showToast('Error saving marks', 'error');
-        } finally {
-            setSaving(false);
+            return { success: false, message: e.message };
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        const result = await prepareAndSaveMarks();
+        setSaving(false);
+
+        if (result.success) {
+            showToast('Draft saved successfully! (Not yet submitted to HOD)', 'success');
+            // Do NOT lock — this is just a draft save, not a submission
+        } else {
+            showToast('Error saving marks: ' + result.message, 'error');
         }
     };
 
     const handleSubmitForApproval = async () => {
         // Prompt for CIE Type
-        const cieType = window.prompt("Enter Assessment Type to Submit (e.g., CIE1, CIE2, CIE3):", "CIE1");
-        if (!cieType) return;
+        const rawCieType = window.prompt("Enter Assessment Type to Submit (e.g., CIE1, CIE2, CIE3):", "CIE1");
+        if (!rawCieType) return;
+
+        // Normalize Input: remove spaces, hyphens and uppercase
+        const cieType = rawCieType.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+        // Validate
+        const validTypes = ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'];
+        if (!validTypes.includes(cieType)) {
+            showToast('Invalid CIE Type. Please enter CIE1, CIE2, CIE3, CIE4, or CIE5', 'error');
+            return;
+        }
 
         setSaving(true);
+
+        // AUTO-SAVE BEFORE SUBMITTING
+        const saveResult = await prepareAndSaveMarks();
+        if (!saveResult.success) {
+            showToast('Auto-save failed: ' + saveResult.message, 'error');
+            setSaving(false);
+            return;
+        }
+
         try {
             const token = user?.token;
             const headers = {
@@ -707,8 +897,7 @@ const FacultyDashboard = () => {
             };
 
             // Call Submit Endpoint
-            // Node.js backend expects query params: ?subjectId=...&cieType=...
-            const res = await fetch(`${API_BASE_URL}/marks/submit?subjectId=${selectedSubject.id}&cieType=${cieType.toUpperCase()}`, {
+            const res = await fetch(`${API_BASE_URL}/marks/submit?subjectId=${selectedSubject.id}&cieType=${cieType}`, {
                 method: 'POST',
                 headers
             });
@@ -758,10 +947,76 @@ const FacultyDashboard = () => {
 
 
     const togglePreview = () => {
-        showToast('Preview Mode: Showing Final Report View', 'info');
-        // In a real app, this might open a modal or new route. 
-        // For now, we utilize the download report as the "final output" check
-        downloadCSV();
+        setShowPreview(!showPreview);
+    };
+
+    const renderPreviewModal = () => {
+        if (!showPreview || !selectedSubject) return null;
+        const subjectStudents = students
+            .filter(s => selectedSubject && s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        return (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowPreview(false)}>
+                <div style={{ background: 'white', borderRadius: '16px', padding: '2rem', width: '90%', maxWidth: '1000px', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '2px solid #e5e7eb', paddingBottom: '1rem' }}>
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#111827' }}>📋 CIE Marks Report Preview</h2>
+                            <p style={{ margin: '0.3rem 0 0', color: '#6b7280', fontSize: '0.9rem' }}>{selectedSubject.name} ({selectedSubject.code}) — {selectedSubject.semester} Sem</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => { window.print(); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>🖨️ Print</button>
+                            <button onClick={() => setShowPreview(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db', background: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}>✕ Close</button>
+                        </div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                            <tr style={{ background: '#f8fafc' }}>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Sl</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Reg No</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', color: '#374151', fontWeight: '600' }}>Student Name</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-1</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-2</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-3</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-4</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '600' }}>CIE-5</th>
+                                <th style={{ padding: '10px 12px', borderBottom: '2px solid #e5e7eb', textAlign: 'center', color: '#374151', fontWeight: '700' }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {subjectStudents.map((student, index) => {
+                                const sMarks = marks[student.id] || {};
+                                const ia1Mark = sMarks['CIE1'] || {};
+                                const v1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '-');
+                                const v2 = sMarks.cie2 !== undefined ? sMarks.cie2 : (ia1Mark.cie2Score != null ? ia1Mark.cie2Score : '-');
+                                const v3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '-';
+                                const v4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '-';
+                                const v5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '-';
+                                const total = [v1, v2, v3, v4, v5].reduce((sum, v) => sum + (v !== '-' && v !== '' && v !== 'Ab' ? (Number(v) || 0) : 0), 0);
+                                const hasAny = [v1, v2, v3, v4, v5].some(v => v !== '-' && v !== '');
+                                const cellStyle = (v) => ({ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', color: v === '-' || v === '' ? '#9ca3af' : '#111827', fontWeight: v !== '-' && v !== '' ? '500' : '400' });
+                                return (
+                                    <tr key={student.id} style={{ background: index % 2 === 0 ? 'white' : '#f9fafb' }}>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{index + 1}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontFamily: 'monospace', fontSize: '0.8rem' }}>{student.rollNo || student.regNo}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontWeight: '500' }}>{student.name}</td>
+                                        <td style={cellStyle(v1)}>{v1}</td>
+                                        <td style={cellStyle(v2)}>{v2}</td>
+                                        <td style={cellStyle(v3)}>{v3}</td>
+                                        <td style={cellStyle(v4)}>{v4}</td>
+                                        <td style={cellStyle(v5)}>{v5}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: hasAny ? '#111827' : '#9ca3af' }}>{hasAny ? total : '-'}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: '#f0fdf4', borderRadius: '8px', fontSize: '0.85rem', color: '#166534' }}>
+                        📊 Total Students: {subjectStudents.length} | Subject: {selectedSubject.name} | Max per CIE: 50 | Total Max: 250
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     // --- NEW FEATURE: EXPORT CSV ---
@@ -813,6 +1068,25 @@ const FacultyDashboard = () => {
     const renderStudentProfileModal = () => {
         if (!showProfileModal || !selectedStudent) return null;
 
+        // Calculate Real Data
+        const percentage = calculateStudentPercentage(selectedStudent);
+        const grade = calculateGradeFromPercentage(percentage);
+
+
+
+        // Status Logic
+        let statusLabel = 'Good Standing';
+        let statusColor = '#059669'; // Green
+
+        if (grade === 'F') {
+            statusLabel = 'At Risk';
+            statusColor = '#dc2626'; // Red
+        } else if (grade === 'D') {
+            statusLabel = 'Average';
+            statusColor = '#d97706'; // Orange
+        }
+
+
         return (
             <div className={styles.modalOverlay} onClick={() => setShowProfileModal(false)}>
                 <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -831,7 +1105,7 @@ const FacultyDashboard = () => {
                                 <h3>{selectedStudent.name}</h3>
                                 <p className={styles.profileMeta}>{selectedStudent.rollNo || selectedStudent.regNo}</p>
                                 <span className={`${styles.badge} ${styles.good}`}>
-                                    {selectedStudent.sem} Sem - {selectedStudent.section} ({selectedStudent.batch})
+                                    {selectedStudent.semester} Sem - {selectedStudent.section || 'A'} ({selectedStudent.batch || '2025'})
                                 </span>
                             </div>
                         </div>
@@ -841,34 +1115,34 @@ const FacultyDashboard = () => {
                                 <span className={styles.infoLabel}>Email Address</span>
                                 <span className={styles.infoValue}>{(selectedStudent.rollNo || selectedStudent.regNo).toLowerCase()}@college.edu</span>
                             </div>
-                            <div className={styles.infoItem}>
-                                <span className={styles.infoLabel}>Attendance</span>
-                                <div className={styles.attendanceBarContainer}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                        <span>Current Semester</span>
-                                        <span style={{ fontWeight: 'bold' }}>{selectedStudent.attendance}%</span>
-                                    </div>
-                                    <div className={styles.attendanceTrack}>
-                                        <div className={styles.attendanceFill} style={{ width: `${selectedStudent.attendance}%` }}></div>
-                                    </div>
-                                </div>
-                            </div>
+
                             <div className={styles.infoItem}>
                                 <span className={styles.infoLabel}>Academic Standing</span>
-                                <span className={styles.infoValue} style={{ color: '#059669' }}>Good Standing</span>
+                                <span className={styles.infoValue} style={{ color: statusColor }}>{statusLabel} ({grade})</span>
                             </div>
                             <div className={styles.infoItem}>
-                                <span className={styles.infoLabel}>Parent Contact</span>
+                                <span className={styles.infoLabel}>Student Phone</span>
                                 <span className={styles.infoValue}>{selectedStudent.phone || 'N/A'}</span>
+                            </div>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Parent Phone</span>
+                                <span className={styles.infoValue}>{selectedStudent.parentPhone || 'N/A'}</span>
                             </div>
                         </div>
 
-                        <button className={styles.saveBtn} style={{ width: '100%' }} onClick={() => showToast('Full Report Downloaded')}>
+                        <div className={styles.infoGrid} style={{ marginTop: '1rem', borderTop: '1px solid #f3f4f6', paddingTop: '1rem' }}>
+                            <div className={styles.infoItem}>
+                                <span className={styles.infoLabel}>Current Aggregate</span>
+                                <span className={styles.infoValue} style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{percentage.toFixed(1)}%</span>
+                            </div>
+                        </div>
+
+                        <button className={styles.saveBtn} style={{ width: '100%', marginTop: '1rem' }} onClick={() => showToast('Full Report Downloaded')}>
                             <FileText size={18} /> Download Full Academic Report
                         </button>
                     </div>
                 </div>
-            </div>
+            </div >
         );
     };
 
@@ -908,23 +1182,14 @@ const FacultyDashboard = () => {
 
 
     // --- HELPER --
-    const calculateGrade = (student) => {
-        let avgMarks = 0;
-        if (student.marks) {
-            const total = (student.marks.ia1 || 0) + (student.marks.ia2 || 0) + (student.marks.ia3 || 0);
-            avgMarks = (total / 60) * 100;
-        } else {
-            // Fallback for mock data demonstration
-            // Make it deterministic based on student ID to ensure filter consistency
-            const pseudoRandom = (student.id || 0) % 50;
-            avgMarks = 50 + pseudoRandom;
-        }
-
-        if (avgMarks >= 90) return 'S';
-        if (avgMarks >= 80) return 'A';
-        if (avgMarks >= 70) return 'B';
-        if (avgMarks >= 60) return 'C';
-        if (avgMarks >= 50) return 'D';
+    const calculateGradeFromPercentage = (percentage) => {
+        if (percentage >= 75) return 'A'; // Was 80, now A covers S range too
+        if (percentage >= 60) return 'B'; // Was 70
+        if (percentage >= 50) return 'C'; // Was 60
+        if (percentage >= 40) return 'D'; // Was 50, lowered passing standard? Or just shifting?
+        // Let's stick to standard 10-point scale but shifted?
+        // User asked for a,b,c,d. 
+        // Typically: A=Distinction, B=First Class, C=Second, D=Pass
         return 'F';
     };
 
@@ -984,30 +1249,14 @@ const FacultyDashboard = () => {
                             <span className={styles.statLabel}><Award size={14} /> Top Performers</span>
                         </div>
                     </div>
-                    <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <TrendingDown size={16} style={{ transform: 'rotate(180deg)' }} /> Average score improved by 5% vs IA-1
+                    <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: facultyClassAnalytics.avgScore >= 50 ? '#059669' : '#ca8a04', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {facultyClassAnalytics.avgScore >= 50 ? <TrendingDown size={16} style={{ transform: 'rotate(180deg)' }} /> : <AlertTriangle size={14} />} {facultyClassAnalytics.avgScore >= 50 ? 'Good performance — class average above 50%' : 'Class average needs improvement'}
                     </p>
                 </div>
             </div>
 
-            {
-                attendanceDefaulters.length > 0 && (
-                    <div className={styles.alertBanner} style={{ backgroundColor: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ backgroundColor: '#ef4444', padding: '0.5rem', borderRadius: '50%', color: 'white' }}>
-                            <AlertTriangle size={24} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1rem', fontWeight: '600' }}>Critical Attendance Alert</h3>
-                            <p style={{ margin: '0.25rem 0 0', color: '#b91c1c', fontSize: '0.9rem' }}>
-                                {attendanceDefaulters.length} students have less than 75% attendance. Immediate action required.
-                            </p>
-                        </div>
-                        <button className={styles.saveBtn} style={{ backgroundColor: '#dc2626' }} onClick={() => setActiveSection('My Students')}>
-                            View List
-                        </button>
-                    </div>
-                )
-            }
+
+
 
 
 
@@ -1038,56 +1287,67 @@ const FacultyDashboard = () => {
                         </div>
                     </section>
 
-                    <section>
-                        <h2 className={styles.sectionTitle}>Quick Actions</h2>
-                        <div className={styles.quickActionsGrid}>
-                            <button className={styles.actionBtn} onClick={() => showToast('Report Generated!')} title="Download consolidated marks sheet">
-                                <FileText size={18} /> Generate Report
-                            </button>
-                            <button className={styles.actionBtn} onClick={() => setShowUploadModal(true)} title="Upload Excel/CSV marks">
-                                <Upload size={18} /> Bulk Marks Upload
-                            </button>
-                            <button className={styles.actionBtn} onClick={() => showToast('Calling Parent...')} title="Direct call via system">
-                                <Phone size={18} /> Parent Call
-                            </button>
-                            <button className={styles.actionBtn} onClick={() => showToast('Downloading Attendance Sheet...')} title="Download monthly attendance">
-                                <Users size={18} /> Attendance Sheet
-                            </button>
-                        </div>
-                    </section>
+
 
 
                 </div>
 
                 <div className={styles.rightColumn}>
+                    {/* Notifications Widget */}
+                    <div className={styles.card}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h2 className={styles.cardTitle} style={{ margin: 0 }}>🔔 Notifications</h2>
+                            <span className={styles.badge} style={{ background: '#eff6ff', color: '#2563eb' }}>{notifications.length} New</span>
+                        </div>
 
-
-                    {/* LOW PERFORMERS PANEL */}
-                    <div className={styles.labCard}>
-                        <h2 className={styles.cardTitle} style={{ color: '#ef4444' }}>Action Required: Low Performers</h2>
-                        <div className={styles.scheduleList}>
-                            {getLowPerformers().length > 0 ? getLowPerformers().map((item, i) => (
-                                <div key={i} className={styles.scheduleItem} style={{ borderLeft: '4px solid #ef4444', paddingLeft: '12px', alignItems: 'center' }}>
-                                    <div className={styles.scheduleInfo} style={{ flex: 1 }}>
-                                        <span className={styles.labName} style={{ fontSize: '1rem', marginBottom: '4px', display: 'block' }}>{item.name}</span>
-                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{item.subject}</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span className={styles.batch} style={{ color: '#ef4444', fontWeight: 'bold' }}>Lowest IA: {item.score}/30</span>
+                        <div className={styles.notificationsList}>
+                            {notifications.length > 0 ? (
+                                notifications.slice(0, 5).map((note, idx) => (
+                                    <div key={note.id || idx} className={styles.notifItem}>
+                                        <div className={styles.notifIcon} style={{ background: '#eff6ff', color: '#2563eb' }}>
+                                            <Bell size={16} />
+                                        </div>
+                                        <div className={styles.notifContent}>
+                                            <p className={styles.notifMessage}>{note.message}</p>
+                                            <span className={styles.notifTime}>{new Date(note.createdAt).toLocaleDateString()}</span>
                                         </div>
                                     </div>
-                                    <button className={styles.iconBtn} onClick={() => showToast(`Alert sent for ${item.name}`)} title="Call Parent">
-                                        <Phone size={18} />
-                                    </button>
+                                ))
+                            ) : (
+                                <div className={styles.noNotifications}>
+                                    <Bell size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+                                    <p>No new notifications</p>
                                 </div>
-                            )) : <p style={{ padding: '1rem', color: '#6b7280' }}>No low performers found.</p>}
+                            )}
+
+                            <button className={styles.viewAllBtn} onClick={() => setActiveSection('Notifications')}>
+                                View All Notifications →
+                            </button>
                         </div>
                     </div>
-
-
                 </div>
             </div >
         </>
     );
+
+    // Helper to calculate percentage for filter (moved from renderMyStudents)
+    const calculateStudentPercentage = (std) => {
+        let totalPerformance = 0;
+        let subjectCount = 0;
+        Object.keys(allStudentMarks).forEach(subId => {
+            const sMarks = allStudentMarks[subId][std.id];
+            if (sMarks) {
+                const scores = [sMarks.cie1, sMarks.cie2, sMarks.cie3, sMarks.cie4, sMarks.cie5].filter(x => x !== '' && x !== 'Ab' && x !== undefined).map(Number);
+                if (scores.length > 0) {
+                    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+                    const percent = (avg / 50) * 100;
+                    totalPerformance += percent;
+                    subjectCount++;
+                }
+            }
+        });
+        return subjectCount > 0 ? (totalPerformance / subjectCount) : 0;
+    };
 
     const renderMyStudents = () => {
         // Use API students
@@ -1145,7 +1405,9 @@ const FacultyDashboard = () => {
                 // or just accept it for now but user asked for filtering.
 
                 // Proceeding with helper usage.
-                return calculateGrade(s) === selectedGradeFilter;
+                // Proceeding with helper usage.
+                const { grade } = getStudentPerformance(s.id);
+                return grade === selectedGradeFilter;
             })
             .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1212,35 +1474,34 @@ const FacultyDashboard = () => {
                             </thead>
                             <tbody>
                                 {filteredStudents.map((std, index) => {
-                                    // Generate mock performance data if missing
-                                    const attendance = std.attendance || Math.floor(Math.random() * 20) + 80;
-                                    const isRisk = attendance < 75;
+                                    // Calculate Real Grade & Status using central helper
+                                    const { grade, hasData } = getStudentPerformance(std.id);
 
-                                    // Grade Logic
-                                    const grade = calculateGrade(std);
+                                    let gradeColor = '#6b7280'; // Gray for N/A
 
-                                    let gradeColor = '#ef4444';
-                                    let gradeBg = '#fee2e2';
+                                    let gradeBg = '#f3f4f6';
 
-                                    if (grade === 'S') { gradeColor = '#15803d'; gradeBg = '#dcfce7'; }
-                                    else if (grade === 'A') { gradeColor = '#166534'; gradeBg = '#f0fdf4'; }
+                                    if (grade === 'A') { gradeColor = '#166534'; gradeBg = '#f0fdf4'; }
                                     else if (grade === 'B') { gradeColor = '#0369a1'; gradeBg = '#e0f2fe'; }
                                     else if (grade === 'C') { gradeColor = '#b45309'; gradeBg = '#fef3c7'; }
                                     else if (grade === 'D') { gradeColor = '#b91c1c'; gradeBg = '#fee2e2'; }
                                     else if (grade === 'F') { gradeColor = '#ef4444'; gradeBg = '#fee2e2'; }
 
                                     // Status Logic based on Grade
-                                    let statusLabel = 'Good Standing';
+                                    let statusLabel = hasData ? 'Good Standing' : 'No Data';
                                     let statusStyle = styles.statusGood;
                                     let StatusIcon = CheckCircle;
 
-                                    if (grade === 'F') {
+                                    if (!hasData) {
+                                        statusStyle = styles.statusAverage; // Neutral
+                                        StatusIcon = AlertCircle;
+                                    } else if (grade === 'F') {
                                         statusLabel = 'At Risk';
                                         statusStyle = styles.statusRisk;
                                         StatusIcon = AlertTriangle;
                                     } else if (grade === 'D') {
                                         statusLabel = 'Average';
-                                        statusStyle = styles.statusAverage; // Need to ensure this class exists or reuse warning color
+                                        statusStyle = styles.statusAverage;
                                         StatusIcon = AlertCircle;
                                     }
 
@@ -1319,18 +1580,41 @@ const FacultyDashboard = () => {
                                         <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>Code: {sub.code}</span>
                                         <span style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: '500' }}>
                                             <Users size={14} style={{ display: 'inline', marginRight: '4px' }} />
-                                            64 Students
+                                            {/* Dynamic Student Count */}
+                                            {students.filter(s => s.department === sub.department && String(s.semester) === String(sub.semester)).length} Students
                                         </span>
                                     </div>
 
-                                    {/* Mock Progress */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#4b5563', marginBottom: '4px' }}>
-                                        <span style={{ flex: 1 }}>Completion</span>
-                                        <span style={{ fontWeight: '600' }}>75%</span>
-                                    </div>
-                                    <div style={{ width: '100%', height: '6px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                                        <div style={{ width: '75%', height: '100%', background: '#10b981', borderRadius: '4px' }}></div>
-                                    </div>
+                                    {/* Dynamic Progress Calculation */}
+                                    {(() => {
+                                        // Filter students for this specific subject
+                                        const subjectStudents = students.filter(s => s.department === sub.department && String(s.semester) === String(sub.semester));
+                                        const totalStd = subjectStudents.length;
+
+                                        // Count how many have at least one mark entry for this subject
+                                        let evaluatedCount = 0;
+                                        if (totalStd > 0 && allStudentMarks && allStudentMarks[sub.id]) {
+                                            evaluatedCount = subjectStudents.filter(std => {
+                                                const m = allStudentMarks[sub.id][std.id];
+                                                // Check if student has ANY valid mark (CIE1-5)
+                                                return m && ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].some(k => m[k] !== undefined && m[k] !== null && m[k] !== '');
+                                            }).length;
+                                        }
+
+                                        const completion = totalStd > 0 ? Math.round((evaluatedCount / totalStd) * 100) : 0;
+
+                                        return (
+                                            <>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#4b5563', marginBottom: '4px' }}>
+                                                    <span style={{ flex: 1 }}>Completion</span>
+                                                    <span style={{ fontWeight: '600' }}>{completion}%</span>
+                                                </div>
+                                                <div style={{ width: '100%', height: '6px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${completion}%`, height: '100%', background: completion === 100 ? '#10b981' : '#3b82f6', borderRadius: '4px' }}></div>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div className={styles.subjectFooter} style={{ borderTop: '1px solid #f3f4f6', paddingTop: '0.75rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1457,6 +1741,7 @@ const FacultyDashboard = () => {
                                     <th>CIE-3 (50)</th>
                                     <th>CIE-4 (50)</th>
                                     <th>CIE-5 (50)</th>
+
                                     <th>Total (250)</th>
                                 </tr>
                             </thead>
@@ -1475,6 +1760,8 @@ const FacultyDashboard = () => {
                                         const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
                                         const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
 
+
+
                                         return (
                                             <tr key={student.id}>
                                                 <td>{index + 1}</td>
@@ -1486,7 +1773,7 @@ const FacultyDashboard = () => {
                                                         className={styles.markInput}
                                                         value={valCIE1}
                                                         onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
-                                                        disabled={isLocked}
+                                                        placeholder=""
                                                     />
                                                 </td>
                                                 <td>
@@ -1495,7 +1782,7 @@ const FacultyDashboard = () => {
                                                         className={styles.markInput}
                                                         value={valCIE2}
                                                         onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
-                                                        disabled={isLocked}
+                                                        placeholder=""
                                                     />
                                                 </td>
                                                 <td>
@@ -1504,7 +1791,7 @@ const FacultyDashboard = () => {
                                                         className={styles.markInput}
                                                         value={valCIE3}
                                                         onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
-                                                        disabled={isLocked}
+                                                        placeholder=""
                                                     />
                                                 </td>
                                                 <td>
@@ -1513,7 +1800,7 @@ const FacultyDashboard = () => {
                                                         className={styles.markInput}
                                                         value={valCIE4}
                                                         onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
-                                                        disabled={isLocked}
+                                                        placeholder=""
                                                     />
                                                 </td>
                                                 <td>
@@ -1522,9 +1809,10 @@ const FacultyDashboard = () => {
                                                         className={styles.markInput}
                                                         value={valCIE5}
                                                         onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
-                                                        disabled={isLocked}
+                                                        placeholder=""
                                                     />
                                                 </td>
+
                                                 {/* Final Total */}
                                                 <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
                                             </tr>
@@ -1540,163 +1828,35 @@ const FacultyDashboard = () => {
 
 
 
-    const renderAttendance = () => {
-        if (!selectedSubject) {
-            return (
-                <div className={styles.emptyState}>
-                    <div style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
-                        <h2 className={styles.sectionTitle}>Mark Attendance</h2>
-                        <p style={{ color: '#6b7280' }}>Select a subject to mark attendance.</p>
-                    </div>
-                    <div className={styles.cardsGrid}>
-                        {mySubjects.map(sub => (
-                            <div key={sub.id} className={styles.subjectCard} onClick={() => { setSelectedSubject(sub); setSavedAttendance(false); }}>
-                                <div className={styles.cardHeader}>
-                                    <h3 className={styles.subjectName}>{sub.name}</h3>
-                                    <span className={styles.termBadge} style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem' }}>{sub.semester} Sem</span>
-                                </div>
-                                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#6b7280', fontSize: '0.9rem' }}>
-                                    <UserCheck size={16} />
-                                    <span>Mark Today's Attendance</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-        }
 
-        // Key for storage
-        const key = `${selectedSubject.id}-${attendanceDate}`;
-        const currentData = attendanceData[key] || {};
 
-        // Use Real Students
-        const classStudents = students.filter(s => s.semester === selectedSubject.semester);
+    const renderMentorship = () => {
+        // Filter real students from API
+        const realMentees = students.filter(s => menteeIds.includes(s.id));
 
-        // Stats
-        const total = classStudents.length;
+        // Combine with manually added mentees
+        const allMentees = [...realMentees, ...manualMentees];
 
-        const presentCount = classStudents.filter(s => (currentData[s.id] || 'Present') === 'Present').length;
-        const absentCount = total - presentCount;
-
-        return (
-            <div className={styles.sectionContainer}>
-                <div className={styles.backLink} onClick={() => setSelectedSubject(null)} style={{ color: '#6b7280', marginBottom: '1rem', display: 'inline-flex', cursor: 'pointer', alignItems: 'center' }}>
-                    <span style={{ marginRight: '0.5rem' }}>←</span> Back to Subject List
-                </div>
-
-                <div className={styles.sectionHeader}>
-                    <div>
-                        <h2 className={styles.sectionTitle}>Attendance: {selectedSubject.name}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
-                            <input
-                                type="date"
-                                value={attendanceDate}
-                                onChange={(e) => setAttendanceDate(e.target.value)}
-                                className={styles.searchInput}
-                                style={{ width: 'auto' }}
-                            />
-                            <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                                Total: <strong>{total}</strong> | Present: <strong style={{ color: '#16a34a' }}>{presentCount}</strong> | Absent: <strong style={{ color: '#dc2626' }}>{absentCount}</strong>
-                            </span>
-                        </div>
-                    </div>
-                    <div className={styles.headerActions}>
-                        <button className={styles.saveBtn} onClick={() => window.open(`http://127.0.0.1:8083/api/reports/attendance/${selectedSubject.id}/csv`, '_blank')} style={{ marginRight: '1rem', backgroundColor: '#3b82f6' }}>
-                            <Download size={16} /> Export CSV
-                        </button>
-                        <button className={styles.saveBtn} onClick={saveAttendance} disabled={savedAttendance}>
-                            <Save size={16} />
-                            {savedAttendance ? 'Saved' : 'Save Attendance'}
-                        </button>
-                    </div>
-                </div>
-
-                <div className={styles.tableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th style={{ width: '60px' }}>Sl No</th>
-                                <th>Reg No</th>
-                                <th>Student Name</th>
-                                <th>Status</th>
-                                <th style={{ width: '150px' }}>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {classStudents.map((std, index) => {
-                                const status = currentData[std.id] || 'Present';
-                                return (
-                                    <tr key={std.id} style={{ backgroundColor: status === 'Absent' ? '#fef2f2' : 'inherit' }}>
-                                        <td style={{ color: '#6b7280' }}>{String(index + 1).padStart(2, '0')}</td>
-                                        <td className={styles.codeText}>{std.rollNo || std.regNo}</td>
-                                        <td>
-                                            <div className={styles.studentNameCell}>
-                                                <div className={styles.avatar} style={{
-                                                    width: '28px', height: '28px', fontSize: '0.8rem',
-                                                    background: `linear-gradient(135deg, ${['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'][index % 5]} 0%, ${['#1d4ed8', '#047857', '#b45309', '#6d28d9', '#be185d'][index % 5]} 100%)`
-                                                }}>
-                                                    {std.name.charAt(0)}
-                                                </div>
-                                                {std.name}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button
-                                                    style={{
-                                                        padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem',
-                                                        borderColor: status === 'Present' ? '#16a34a' : '#d1d5db',
-                                                        backgroundColor: status === 'Present' ? '#dcfce7' : 'white',
-                                                        color: status === 'Present' ? '#166534' : '#6b7280'
-                                                    }}
-                                                    onClick={() => handleAttendanceChange(std.id, 'Present')}
-                                                >
-                                                    Present
-                                                </button>
-                                                <button
-                                                    style={{
-                                                        padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem',
-                                                        borderColor: status === 'Absent' ? '#dc2626' : '#d1d5db',
-                                                        backgroundColor: status === 'Absent' ? '#fee2e2' : 'white',
-                                                        color: status === 'Absent' ? '#991b1b' : '#6b7280'
-                                                    }}
-                                                    onClick={() => handleAttendanceChange(std.id, 'Absent')}
-                                                >
-                                                    Absent
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            {status === 'Absent' && (
-                                                <button className={styles.iconBtn} style={{ color: '#dc2626' }} title="Notify Parent" onClick={() => showToast(`SMS sent to ${std.name}'s parent`)}>
-                                                    <Mail size={16} /> Send SMS
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
-
-    const renderProctoring = () => {
         // Calculate performance color
         const getPerformanceColor = (avg) => {
-            if (avg < 60) return { bg: '#fee2e2', text: '#b91c1c', icon: <AlertTriangle size={14} /> }; // Red
-            if (avg < 75) return { bg: '#fef3c7', text: '#b45309', icon: <AlertCircle size={14} /> }; // Yellow
-            return { bg: '#dcfce7', text: '#15803d', icon: <CheckCircle size={14} /> }; // Green
+            if (avg < 40) return { bg: '#fee2e2', text: '#b91c1c', icon: <AlertTriangle size={14} /> };
+            if (avg < 75) return { bg: '#fef3c7', text: '#b45309', icon: <AlertCircle size={14} /> };
+            return { bg: '#dcfce7', text: '#15803d', icon: <CheckCircle size={14} /> };
         };
 
         return (
             <div className={styles.sectionContainer}>
                 <div className={styles.sectionHeader}>
-                    <h2 className={styles.sectionTitle}>Mentorship / Proctoring</h2>
+                    <div>
+                        <h2 className={styles.sectionTitle}>Mentorship / Proctoring</h2>
+                        <p style={{ color: '#64748b', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                            Managing {allMentees.length} students under mentorship.
+                        </p>
+                    </div>
                     <div className={styles.headerActions}>
+                        <button className={styles.saveBtn} onClick={() => setShowMenteeModal(true)} style={{ background: '#2563eb' }}>
+                            <FilePlus size={16} /> Add New Student
+                        </button>
                         <button className={styles.filterBtn} onClick={() => showToast('Meeting Logs Downloaded')}>
                             <Download size={16} /> Export Logs
                         </button>
@@ -1709,16 +1869,35 @@ const FacultyDashboard = () => {
                             <tr>
                                 <th>Student Details</th>
                                 <th>Parent Contact</th>
-                                <th>Attendance</th>
+
                                 <th>Academic Standing (CIE Avg)</th>
-                                <th>last Meeting</th>
-                                <th>Actions</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {myMentees.map(student => {
-                                // Mock Average Calculation for display
-                                const avgScore = student.marks ? Math.round(((student.marks.ia1 + student.marks.ia2) / 60) * 100) : Math.floor(Math.random() * 40) + 50;
+                            {allMentees.length > 0 ? allMentees.map(student => {
+                                const avgScore = student.isManual ? parseInt(student.avgMark) || 0 : (() => {
+                                    let totalScored = 0;
+                                    let count = 0;
+                                    if (allStudentMarks) {
+                                        Object.keys(allStudentMarks).forEach(subId => {
+                                            const m = allStudentMarks[subId][student.id];
+                                            if (m) {
+                                                const cies = ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'];
+                                                cies.forEach(cKey => {
+                                                    const val = m[cKey];
+                                                    if (val !== undefined && val !== null && val !== '') {
+                                                        totalScored += (val === 'Ab' ? 0 : (parseInt(val) || 0));
+                                                        count++;
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+                                    return count > 0 ? Math.round((totalScored / (count * 50)) * 100) : 0;
+                                })();
+
+
                                 const perf = getPerformanceColor(avgScore);
 
                                 return (
@@ -1733,26 +1912,17 @@ const FacultyDashboard = () => {
                                                 </div>
                                                 <div>
                                                     <div style={{ fontWeight: '600', color: '#111827' }}>{student.name}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{student.rollNo || student.regNo}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{student.regNo || student.rollNo}</div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 <span style={{ fontWeight: '500', fontSize: '0.9rem' }}>{student.parentPhone}</span>
-                                                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Relationship: Father</span>
+                                                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Relationship: Parent</span>
                                             </div>
                                         </td>
-                                        <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{ width: '60px', height: '6px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                                                    <div style={{ width: `${student.attendance}%`, height: '100%', background: student.attendance < 75 ? '#dc2626' : '#10b981' }}></div>
-                                                </div>
-                                                <span style={{ fontWeight: '600', color: student.attendance < 75 ? '#dc2626' : '#374151' }}>
-                                                    {student.attendance}%
-                                                </span>
-                                            </div>
-                                        </td>
+
                                         <td>
                                             <span style={{
                                                 display: 'inline-flex',
@@ -1766,25 +1936,42 @@ const FacultyDashboard = () => {
                                                 fontSize: '0.85rem'
                                             }}>
                                                 {perf.icon}
-                                                {avgScore}% Avg
+                                                {avgScore > 0 ? `${avgScore}% Avg` : 'No Data'}
                                             </span>
                                         </td>
-                                        <td style={{ color: '#6b7280', fontSize: '0.9rem' }}>
-                                            {student.lastMeeting}
-                                        </td>
                                         <td>
-                                            <div className={styles.actionIcons}>
-                                                <button className={styles.iconBtn} onClick={() => showToast(`Calling Parent of ${student.name}...`)} title="Call Parent">
-                                                    <Phone size={16} />
-                                                </button>
-                                                <button className={styles.iconBtn} onClick={() => showToast('Opened Meeting Log')} title="View Log">
-                                                    <FileText size={16} />
-                                                </button>
-                                            </div>
+                                            <button
+                                                className={styles.iconBtn}
+                                                onClick={() => handleEditStudent(student)}
+                                                style={{ color: '#0ea5e9', background: '#e0f2fe', padding: '6px', marginRight: '8px' }}
+                                                title="Edit Student Details"
+                                            >
+                                                <Edit3 size={16} />
+                                            </button>
+                                            <button
+                                                className={styles.iconBtn}
+                                                onClick={() => handleRemoveMentee(student.id)}
+                                                style={{ color: '#dc2626', background: '#fee2e2', padding: '6px' }}
+                                                title="Remove from Mentorship"
+                                            >
+                                                <X size={16} />
+                                            </button>
                                         </td>
                                     </tr>
                                 );
-                            })}
+                            }) : (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                            <Users size={32} style={{ opacity: 0.5 }} />
+                                            <p>No students assigned for mentorship.</p>
+                                            <button className={styles.secondaryBtn} onClick={() => setShowMenteeModal(true)}>
+                                                + Add Your First Student
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -1902,6 +2089,64 @@ const FacultyDashboard = () => {
         );
     };
 
+    const renderEditStudentModal = () => {
+        if (!showEditModal || !editingStudent) return null;
+
+        return (
+            <div className={styles.modalOverlay} onClick={() => setShowEditModal(false)}>
+                <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.modalHeader}>
+                        <h2>Edit Student Details</h2>
+                        <button className={styles.closeBtn} onClick={() => setShowEditModal(false)}>
+                            <X size={20} />
+                        </button>
+                    </div>
+                    <div className={styles.modalBody}>
+                        <form onSubmit={handleUpdateStudent}>
+                            <div className={styles.formGroup}>
+                                <label>Student Name</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.name || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label>Register Number</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.regNo || editingStudent.rollNo || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, regNo: e.target.value })}
+                                />
+                            </div>
+                            <div className={styles.formGroup}>
+                                <label>Parent Phone</label>
+                                <input
+                                    type="text"
+                                    className={styles.input}
+                                    value={editingStudent.parentPhone || ''}
+                                    onChange={(e) => setEditingStudent({ ...editingStudent, parentPhone: e.target.value })}
+                                />
+                            </div>
+
+                            <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                <button type="button" className={styles.filterBtn} onClick={() => setShowEditModal(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className={styles.saveBtn}>
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     // --- NEW FEATURE: CIE SCHEDULE UPDATE (Faculty) ---
     const renderCIESchedule = () => {
         // Use iaConfig directly which is populated by fetchSchedule
@@ -1926,8 +2171,6 @@ const FacultyDashboard = () => {
                     {/* Left Column: Form */}
                     <div className={styles.leftColumn} style={{ flex: 2 }}>
                         <div className={styles.glassCard}>
-                            <h2 className={styles.sectionTitle}>CIE Details (Scheduled by HOD)</h2>
-
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                 {/* Subject & CIE Select */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -1959,7 +2202,6 @@ const FacultyDashboard = () => {
                                                         padding: '8px',
                                                         borderRadius: '8px',
                                                         border: 'none',
-                                                        // Using Blue (#2563eb) for active state
                                                         background: iaConfig.cieNumber === num ? '#2563eb' : 'transparent',
                                                         color: iaConfig.cieNumber === num ? 'white' : '#64748b',
                                                         fontWeight: 600,
@@ -1972,29 +2214,6 @@ const FacultyDashboard = () => {
                                                     {num}
                                                 </button>
                                             ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Read-Only Schedule Info */}
-                                <div style={{ background: '#f1f5f9', padding: '1rem', borderRadius: '10px', border: '1px dashed #cbd5e1' }}>
-                                    <h4 style={{ margin: '0 0 1rem 0', color: '#475569', fontSize: '0.9rem', textTransform: 'uppercase' }}>Schedule (Read Only)</h4>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div>
-                                            <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b' }}>Date</span>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{iaConfig.subjectId ? currentSchedule.date : '-'}</span>
-                                        </div>
-                                        <div>
-                                            <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b' }}>Time</span>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{iaConfig.subjectId ? currentSchedule.time : '-'}</span>
-                                        </div>
-                                        <div>
-                                            <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b' }}>Duration</span>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{iaConfig.subjectId ? currentSchedule.duration : '-'}</span>
-                                        </div>
-                                        <div>
-                                            <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b' }}>Room</span>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{iaConfig.subjectId ? currentSchedule.room : '-'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2071,51 +2290,182 @@ const FacultyDashboard = () => {
                     </div>
                 </div>
 
-                {/* READ-ONLY Published Schedules from HOD */}
+                {/* READ-ONLY Published Schedules from HOD - REVAMPED CARD STYLE */}
                 <div className={styles.card} style={{ marginTop: '2rem' }}>
-                    <div className={styles.cardHeader}>
-                        <h3 style={{ margin: 0, color: '#1e293b' }}>📅 Published CIE Schedules (Read Only)</h3>
-                        <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Scheduled by HOD</span>
+                    <div className={styles.cardHeader} style={{ marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: 0, color: '#1e293b' }}>📅 Published CIE Schedules</h3>
+                        <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Upcoming Exams</span>
                     </div>
+
+                    <div className={styles.alertList} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {publishedSchedules.filter(s => mySubjects.some(sub => sub.id === (s.subject?.id || s.subjectId))).length > 0 ?
+                            publishedSchedules
+                                .filter(s => mySubjects.some(sub => sub.id === (s.subject?.id || s.subjectId)))
+                                .map(sched => (
+                                    <div key={sched.id} className={styles.alertItem} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        padding: '1rem',
+                                        background: '#f8fafc',
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
+                                        gap: '1rem'
+                                    }}>
+                                        <div style={{
+                                            background: 'white',
+                                            padding: '0.5rem',
+                                            borderRadius: '8px',
+                                            textAlign: 'center',
+                                            minWidth: '60px',
+                                            border: '1px solid #f1f5f9',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                        }}>
+                                            <span style={{ display: 'block', fontSize: '1.2rem', fontWeight: 'bold', color: '#2563eb' }}>
+                                                {sched.scheduledDate ? new Date(sched.scheduledDate).getDate() : '-'}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>
+                                                {sched.scheduledDate ? new Date(sched.scheduledDate).toLocaleString('default', { month: 'short' }) : '-'}
+                                            </span>
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
+                                                <h4 style={{ margin: 0, fontSize: '1rem', color: '#1e293b', fontWeight: 600 }}>
+                                                    {sched.subject ? sched.subject.name : 'Unknown Subject'}
+                                                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal', marginLeft: '6px' }}>
+                                                        ({sched.subject?.code})
+                                                    </span>
+                                                </h4>
+                                                <span className={styles.statusBadge} style={{
+                                                    background: '#dbeafe',
+                                                    color: '#1e40af',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: 600
+                                                }}>
+                                                    CIE-{sched.cieNumber}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#475569', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Clock size={16} className={styles.textBlue} />
+                                                    {sched.startTime || '-'} ({sched.durationMinutes}m)
+                                                </span>
+                                                {sched.examRoom && (
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <MapPin size={16} className={styles.textRed} />
+                                                        {sched.examRoom}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {sched.instructions && (
+                                                <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#6b7280', fontStyle: 'italic' }}>
+                                                    " {sched.instructions} "
+                                                </div>
+                                            )}
+                                            <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'right' }}>
+                                                Scheduled by: <span style={{ fontWeight: 600, color: '#64748b' }}>{sched.publishedBy || 'HOD'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )) : (
+                                <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                                    <Calendar size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
+                                    <p>No exams scheduled yet.</p>
+                                </div>
+                            )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderLowPerformers = () => {
+        return (
+            <div className={styles.sectionContainer}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div>
+                        <h2 className={styles.sectionTitle} style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                            <AlertTriangle size={24} /> Action Required: Low Performers
+                        </h2>
+                        <p style={{ color: '#64748b', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                            Students who scored less than 20/50 in any CIE.
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <select
+                            className={styles.searchInput}
+                            style={{ width: 'auto', padding: '8px 12px', fontSize: '0.9rem' }}
+                            value={filterSubject}
+                            onChange={(e) => setFilterSubject(e.target.value)}
+                        >
+                            <option value="All">All Subjects</option>
+                            {mySubjects.map(sub => (
+                                <option key={sub.id} value={sub.name}>{sub.name}</option>
+                            ))}
+                        </select>
+                        <select
+                            className={styles.searchInput}
+                            style={{ width: 'auto', padding: '8px 12px', fontSize: '0.9rem' }}
+                            value={filterCIE}
+                            onChange={(e) => setFilterCIE(e.target.value)}
+                        >
+                            <option value="All">All CIE</option>
+                            {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
+                                <option key={cie} value={cie}>{cie}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                <div className={styles.card}>
                     <div className={styles.tableContainer}>
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Subject</th>
-                                    <th>CIE</th>
-                                    <th>Date</th>
-                                    <th>Time</th>
-                                    <th>Duration</th>
-                                    <th>Room</th>
-                                    <th>Status</th>
+                                    <th>Sl No</th>
+                                    <th>Reg No</th>
+                                    <th>Student Name</th>
+                                    <th>Marks</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {publishedSchedules.length > 0 ? publishedSchedules.map(sched => (
-                                    <tr key={sched.id}>
-                                        <td style={{ fontWeight: 600 }}>{sched.subject?.name || 'Unknown'}</td>
-                                        <td><span className={styles.badge}>CIE-{sched.cieNumber}</span></td>
-                                        <td>{sched.scheduledDate || '-'}</td>
-                                        <td>{sched.startTime || '-'}</td>
-                                        <td>{sched.durationMinutes ? `${sched.durationMinutes}m` : '-'}</td>
-                                        <td>{sched.examRoom || '-'}</td>
-                                        <td>
-                                            <span style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '20px',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 600,
-                                                background: '#dcfce7',
-                                                color: '#166534'
-                                            }}>
-                                                {sched.status || 'SCHEDULED'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                )) : (
+                                {facultyClassAnalytics.lowPerformersList && facultyClassAnalytics.lowPerformersList
+                                    .filter(item => filterSubject === 'All' || item.subject === filterSubject)
+                                    .filter(item => filterCIE === 'All' || item.cieType === filterCIE)
+                                    .length > 0 ? (
+                                    facultyClassAnalytics.lowPerformersList
+                                        .filter(item => filterSubject === 'All' || item.subject === filterSubject)
+                                        .filter(item => filterCIE === 'All' || item.cieType === filterCIE)
+                                        .map((item, i) => (
+                                            <tr key={i}>
+                                                <td style={{ color: '#64748b' }}>{i + 1}</td>
+                                                <td className={styles.codeText}>{item.regNo}</td>
+                                                <td>
+                                                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.subject} ({item.cieType})</div>
+                                                </td>
+                                                <td style={{ color: '#ef4444', fontWeight: 'bold' }}>{item.score}/50</td>
+                                                <td>
+                                                    <button
+                                                        className={styles.iconBtn}
+                                                        onClick={() => showToast(`Alert sent for ${item.name}`)}
+                                                        title="Notify Parent"
+                                                        style={{ color: '#dc2626', background: '#fee2e2', padding: '6px' }}
+                                                    >
+                                                        <Phone size={16} /> Notify
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                ) : (
                                     <tr>
-                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                            No CIE schedules published yet.
+                                        <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                                <CheckCircle size={32} color="#10b981" />
+                                                <p>No low performers found matching filters!</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
@@ -2127,22 +2477,77 @@ const FacultyDashboard = () => {
         );
     };
 
+    // Clear Notifications Handler
+    const handleClearNotifications = async () => {
+        if (!window.confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/clear`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications([]);
+                setUnreadCount(0);
+                showToast('Notifications cleared successfully');
+            } else {
+                showToast('Failed to clear notifications', 'error');
+            }
+        } catch (e) {
+            console.error("Failed to clear notifications", e);
+            showToast('Error clearing notifications', 'error');
+        }
+    };
+
+    const handleDeleteNotification = async (id) => {
+        try {
+            const token = user?.token;
+            if (!token) return;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const response = await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE', headers });
+            if (response.ok) {
+                setNotifications(prev => prev.filter(n => n.id !== id));
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            }
+        } catch (e) {
+            console.error("Failed to delete notification", e);
+        }
+    };
+
     // Render Notifications Section
     const renderNotifications = () => {
         return (
             <div className={styles.card}>
-                <h2 className={styles.cardTitle}>All Notifications</h2>
+                <div className={styles.cardHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2 className={styles.cardTitle} style={{ margin: 0 }}>All Notifications</h2>
+                    {notifications.length > 0 && (
+                        <button
+                            className={styles.secondaryBtn}
+                            onClick={handleClearNotifications}
+                            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2', display: 'flex', alignItems: 'center' }}
+                        >
+                            <Trash2 size={14} style={{ marginRight: '4px' }} /> Clear All
+                        </button>
+                    )}
+                </div>
                 <div className={styles.notificationsList}>
                     {notifications.length > 0 ? notifications.map(notif => (
-                        <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`}>
+                        <div key={notif.id} className={`${styles.notifItem} ${!notif.isRead ? styles.unread : ''}`} style={{ position: 'relative' }}>
                             <div className={styles.notifIcon}>
                                 {notif.type === 'INFO' ? <Bell size={20} /> : <AlertCircle size={20} />}
                             </div>
-                            <div className={styles.notifContent}>
+                            <div className={styles.notifContent} style={{ paddingRight: '20px' }}>
                                 <p className={styles.notifMessage}>{notif.message}</p>
                                 <span className={styles.notifTime}>{new Date(notif.createdAt).toLocaleString()}</span>
                                 {notif.category && <span className={styles.notifCategory}>{notif.category}</span>}
                             </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteNotification(notif.id); }}
+                                style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                className={styles.deleteNotifBtn}
+                                title="Delete"
+                            >
+                                <X size={14} />
+                            </button>
                         </div>
                     )) : (
                         <div className={styles.emptyState}>
@@ -2155,58 +2560,6 @@ const FacultyDashboard = () => {
         );
     };
 
-    // Render My Announcements Section
-    const renderMyAnnouncements = () => {
-        return (
-            <div className={styles.card}>
-                <h2 className={styles.cardTitle}>My CIE Announcements</h2>
-                <div className={styles.tableContainer}>
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th>Subject</th>
-                                <th>CIE Number</th>
-                                <th>Scheduled Date</th>
-                                <th>Start Time</th>
-                                <th>Room</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {myAnnouncements.length > 0 ? myAnnouncements.map(ann => (
-                                <tr key={ann.id}>
-                                    <td>
-                                        <div className={styles.subjectCell}>
-                                            <span className={styles.subjectName}>{ann.Subject?.name || 'N/A'}</span>
-                                            <span className={styles.subjectCode}>{ann.Subject?.code || ''}</span>
-                                        </div>
-                                    </td>
-                                    <td>CIE {ann.cieNumber}</td>
-                                    <td>{new Date(ann.scheduledDate).toLocaleDateString()}</td>
-                                    <td>{ann.startTime}</td>
-                                    <td>{ann.examRoom}</td>
-                                    <td>
-                                        <span className={`${styles.badge} ${ann.status === 'SCHEDULED' ? styles.good : styles.needsFocus}`}>
-                                            {ann.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
-                                        <div className={styles.emptyState}>
-                                            <Megaphone size={48} />
-                                            <p>No announcements created yet</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <DashboardLayout menuItems={menuItems} >
@@ -2225,16 +2578,220 @@ const FacultyDashboard = () => {
             }
             {activeSection === 'My Students' && renderMyStudents()}
             {activeSection === 'CIE Entry' && renderCIEEntry()}
-            {activeSection === 'Attendance' && renderAttendance()}
+            {renderPreviewModal()}
+
             {activeSection === 'Lesson Plan' && renderLessonPlan()}
             {activeSection === 'CIE Schedule' && renderCIESchedule()}
-            {activeSection === 'Proctoring' && renderProctoring()}
+            {activeSection === 'Mentorship' && renderMentorship()}
+            {activeSection === 'Low Performers' && renderLowPerformers()}
             {activeSection === 'Notifications' && renderNotifications()}
-            {activeSection === 'My Announcements' && renderMyAnnouncements()}
 
             {/* MODALS */}
             {renderStudentProfileModal()}
             {renderUploadModal()}
+            {showMenteeModal && (
+                <div className={styles.modalOverlay} onClick={() => setShowMenteeModal(false)}>
+                    <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+                        <div className={styles.modalHeader}>
+                            <h2>Add New Student to Mentorship</h2>
+                            <button className={styles.closeBtn} onClick={() => setShowMenteeModal(false)}><X size={20} /></button>
+                        </div>
+                        <div className={styles.modalBody}>
+                            <div className={styles.tabHeader} style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+                                <button
+                                    className={modalTab === 'select' ? styles.tabBtnActive : styles.tabBtn}
+                                    onClick={() => setModalTab('select')}
+                                    style={{ background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 'bold', borderBottom: modalTab === 'select' ? '2px solid #2563eb' : 'none', color: modalTab === 'select' ? '#2563eb' : '#64748b' }}
+                                >
+                                    Quick Select (Dept Students)
+                                </button>
+                                <button
+                                    className={modalTab === 'manual' ? styles.tabBtnActive : styles.tabBtn}
+                                    onClick={() => setModalTab('manual')}
+                                    style={{ background: 'none', border: 'none', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: 'bold', borderBottom: modalTab === 'manual' ? '2px solid #2563eb' : 'none', color: modalTab === 'manual' ? '#2563eb' : '#64748b' }}
+                                >
+                                    Manual Entry
+                                </button>
+                            </div>
+
+                            {modalTab === 'select' ? (
+                                <>
+                                    <div className={styles.searchWrapper} style={{ marginBottom: '1.5rem' }}>
+                                        <Search className={styles.searchIcon} size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search students in your department..."
+                                            className={styles.searchInput}
+                                            style={{ width: '100%' }}
+                                            value={menteeSearchTerm}
+                                            onChange={(e) => setMenteeSearchTerm(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    <div className={styles.tableContainer} style={{ maxHeight: '450px', overflowY: 'auto' }}>
+                                        <table className={styles.table}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Student Details</th>
+
+                                                    <th>Avg</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {students
+                                                    .filter(s =>
+                                                        (s.name.toLowerCase().includes(menteeSearchTerm.toLowerCase()) ||
+                                                            (s.regNo && s.regNo.toLowerCase().includes(menteeSearchTerm.toLowerCase())) ||
+                                                            (s.rollNo && s.rollNo.toLowerCase().includes(menteeSearchTerm.toLowerCase()))) &&
+                                                        !menteeIds.includes(s.id) &&
+                                                        s.department === user?.department
+                                                    )
+                                                    .slice(0, 100) // Show all relevant students
+                                                    .map(std => {
+                                                        // Calculate marks
+                                                        let totalScored = 0;
+                                                        let count = 0;
+                                                        if (allStudentMarks) {
+                                                            Object.keys(allStudentMarks).forEach(subId => {
+                                                                const m = allStudentMarks[subId][std.id];
+                                                                if (m) {
+                                                                    ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(cKey => {
+                                                                        const val = m[cKey];
+                                                                        if (val !== undefined && val !== null && val !== '') {
+                                                                            totalScored += (val === 'Ab' ? 0 : (parseInt(val) || 0));
+                                                                            count++;
+                                                                        }
+                                                                    });
+                                                                }
+                                                            });
+                                                        }
+                                                        const avg = count > 0 ? Math.round((totalScored / (count * 50)) * 100) : 0;
+
+                                                        let realAtt = 0; // std.attendance || 0; // Removed attendance logic
+
+
+                                                        return (
+                                                            <tr key={std.id}>
+                                                                <td>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <div className={styles.avatar} style={{ width: '24px', height: '24px', fontSize: '0.7rem' }}>{std.name.charAt(0)}</div>
+                                                                        <div>
+                                                                            <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{std.name}</div>
+                                                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{std.regNo || std.rollNo}</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+
+                                                                <td>
+                                                                    <span className={styles.badge} style={{
+                                                                        fontSize: '0.7rem',
+                                                                        backgroundColor: avg < 40 ? '#fee2e2' : (avg < 75 ? '#fef3c7' : '#dcfce7'),
+                                                                        color: avg < 40 ? '#b91c1c' : (avg < 75 ? '#b45309' : '#15803d')
+                                                                    }}>
+                                                                        {count > 0 ? `${avg}%` : 'N/A'}
+                                                                    </span>
+                                                                </td>
+                                                                <td>
+                                                                    <button className={styles.saveBtn} style={{ padding: '3px 8px', fontSize: '0.7rem' }} onClick={() => handleAddMentee(std.id)}>Add</button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                        </table>
+                                        {students.filter(s => s.department === user?.department && !menteeIds.includes(s.id)).length === 0 && (
+                                            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>All department students are already in your mentorship list.</div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <form onSubmit={handleAddManualStudent} className={styles.manualEntryForm}>
+                                    <div className={styles.infoGrid} style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Registration Number</label>
+                                            <input
+                                                type="text"
+                                                className={styles.largeInput}
+                                                placeholder="e.g. 459CS25001"
+                                                required
+                                                maxLength={10}
+                                                value={newStudentForm.regNo}
+                                                onChange={(e) => setNewStudentForm({ ...newStudentForm, regNo: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Student Name</label>
+                                            <input
+                                                type="text"
+                                                className={styles.largeInput}
+                                                placeholder="Ex: John Doe"
+                                                required
+                                                value={newStudentForm.name}
+                                                onChange={(e) => {
+                                                    // Only allow letters and spaces
+                                                    if (/^[a-zA-Z\s]*$/.test(e.target.value)) {
+                                                        setNewStudentForm({ ...newStudentForm, name: e.target.value });
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Parent Contact</label>
+                                            <input
+                                                type="tel"
+                                                className={styles.largeInput}
+                                                placeholder="Phone Number"
+                                                required
+                                                value={newStudentForm.parentPhone}
+                                                onChange={(e) => {
+                                                    // Only allow numbers
+                                                    if (/^[0-9]*$/.test(e.target.value)) {
+                                                        setNewStudentForm({ ...newStudentForm, parentPhone: e.target.value });
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className={styles.infoItem}>
+                                            <label className={styles.infoLabel}>Academic CIE Avg (%)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.largeInput}
+                                                placeholder="0-100"
+                                                min="0"
+                                                max="100"
+                                                required
+                                                value={newStudentForm.avgMark}
+                                                onChange={(e) => setNewStudentForm({ ...newStudentForm, avgMark: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                        <button
+                                            type="button"
+                                            className={styles.filterBtn}
+                                            onClick={() => setShowMenteeModal(false)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className={styles.saveBtn}
+                                        >
+                                            Add Student
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {renderEditStudentModal()}
 
             {
                 toast.show && (
@@ -2247,7 +2804,6 @@ const FacultyDashboard = () => {
         </DashboardLayout >
     );
 };
-
 
 
 export default FacultyDashboard;

@@ -1,29 +1,42 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
+import { useAuth } from '../context/AuthContext';
 import styles from './PrincipalDashboard.module.css';
 import {
     LayoutDashboard, Users, ShieldCheck, Calendar, BarChart2,
-    Briefcase, Bell, AlertTriangle, FileText, Building, Award, ScrollText, GraduationCap
+    Briefcase, Bell, AlertTriangle, FileText, Building, LogOut
 } from 'lucide-react';
+import headerLogo from '../assets/header_logo.png';
 
 // Import Extracted Components
 import { ToastNotification, SimpleModal } from '../components/dashboard/principal/Shared';
 import { StudentSentinel } from '../components/dashboard/principal/Widgets';
 import OverviewSection from '../components/dashboard/principal/OverviewSection';
 import ComplianceSection from '../components/dashboard/principal/ComplianceSection';
+import DepartmentSection from '../components/dashboard/principal/DepartmentSection';
+// import FacultySection from '../components/dashboard/principal/FacultySection'; // Replaced by FacultyDirectorySection
 import { DirectorySection } from '../components/dashboard/principal/DirectorySection';
 import {
-    FacultyDirectorySection, TimetablesSection, CircularsSection,
-    ReportsSection, GrievancesSection
+    FacultyDirectorySection, CIEScheduleSection,
+    ReportsSection, NotificationsSection
 } from '../components/dashboard/principal/SectionComponents';
+
 import {
-    getStudentsByDept
-} from '../utils/mockData';
-import { fetchPrincipalDashboard } from '../services/api';
+    fetchPrincipalDashboard, fetchAllFaculty, fetchTimetables,
+    fetchNotifications, fetchReports
+} from '../services/api';
 
 const PrincipalDashboard = () => {
+    const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState('overview');
+
+    // Data States
     const [dashboardData, setDashboardData] = useState(null);
+    const [facultyList, setFacultyList] = useState([]);
+    const [timetables, setTimetables] = useState([]);
+    const [notifications, setNotifications] = useState([]);
+    const [reports, setReports] = useState([]);
+
     const [loading, setLoading] = useState(true);
 
     // Directory State
@@ -32,244 +45,260 @@ const PrincipalDashboard = () => {
 
     // Interaction State
     const [toast, setToast] = useState({ show: false, msg: '', type: 'info' });
-    const [activeModal, setActiveModal] = useState(null); // 'faculty', 'broadcast', 'grievance'
+    const [activeModal, setActiveModal] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
 
+    // Notification Sending State
+    const [msgRecipientType, setMsgRecipientType] = useState('HOD');
+    const [msgTargetDept, setMsgTargetDept] = useState('ALL');
+    const [msgText, setMsgText] = useState('');
+
+    // Fetch All Data
     useEffect(() => {
         const loadDashboardData = async () => {
             try {
-                const data = await fetchPrincipalDashboard();
-                if (data) {
-                    setDashboardData(data);
-                }
+                const token = user?.token;
+                console.log("DEBUG: Fetching Principal Dashboard with token:", token ? "Present" : "Missing");
+                setLoading(true);
+
+                // Parallel fetching of all required data
+                const [
+                    dashData,
+                    faculty,
+                    times,
+                    notifs,
+                    reps
+                ] = await Promise.all([
+                    fetchPrincipalDashboard(token),
+                    fetchAllFaculty(token),
+                    fetchTimetables(token),
+                    fetchNotifications(token),
+                    fetchReports(token)
+                ]);
+
+                if (dashData) setDashboardData(dashData);
+                if (faculty) setFacultyList(faculty);
+                if (times) setTimetables(times);
+                if (notifs) setNotifications(notifs);
+                if (reps) setReports(reps);
+
             } catch (error) {
-                console.error("Failed to load dashboard data", error);
-                showToast("Failed to load live data", "error");
+                console.error("Failed to load dashboard data details:", error);
+                if (error.response) {
+                    console.error("Response status:", error.response.status);
+                    console.error("Response data:", await error.response.json());
+                }
+                showToast("Failed to load live data: " + error.message, "error");
             } finally {
                 setLoading(false);
             }
         };
 
-        if (activeTab === 'overview') {
+        if (user) {
             loadDashboardData();
         }
-    }, [activeTab]);
+    }, [user]);
 
     const showToast = useCallback((msg, type = 'success') => {
         setToast({ show: true, msg, type });
         setTimeout(() => setToast({ show: false, msg: '', type: 'info' }), 3000);
     }, []);
 
-    const handleDownload = useCallback((item) => {
-        showToast(`Downloading ${item.name || item.dept + ' Timetable'}...`, 'info');
-    }, [showToast]);
+    const handleDownload = useCallback((item) => showToast(`Downloading ${item.name || 'document'}...`, 'info'), [showToast]);
+    const handleNewBroadcast = useCallback(() => setActiveModal('broadcast'), []);
+    const handleSaveFaculty = useCallback((e) => { e.preventDefault(); setActiveModal(null); showToast('Faculty Saved', 'success'); }, [showToast]);
 
-    const handleSaveFaculty = useCallback((e) => {
-        e.preventDefault();
-        setActiveModal(null);
-        showToast('New Faculty Added Successfully!', 'success');
-    }, [showToast]);
-
-    const handleSendBroadcast = useCallback((e) => {
-        e.preventDefault();
-        setActiveModal(null);
-        showToast('Circular Broadcasted Successfully!', 'success');
-    }, [showToast]);
-
-    const menuItems = useMemo(() => [
-        {
-            label: 'Dashboard Overview',
-            path: '/dashboard/principal',
-            icon: <LayoutDashboard size={20} />,
-            isActive: activeTab === 'overview',
-            onClick: () => setActiveTab('overview')
-        },
-        {
-            label: 'Staff Management',
-            path: '/dashboard/principal/faculty',
-            icon: <Briefcase size={20} />,
-            isActive: activeTab === 'faculty',
-            onClick: () => setActiveTab('faculty')
-        },
-        {
-            label: 'Student Progression',
-            path: '/dashboard/principal/directory',
-            icon: <Users size={20} />,
-            isActive: activeTab === 'directory',
-            onClick: () => { setActiveTab('directory'); setSelectedDept(null); }
-        },
-        {
-            label: 'Academic Schedule',
-            path: '/dashboard/principal/timetables',
-            icon: <Calendar size={20} />,
-            isActive: activeTab === 'timetables',
-            onClick: () => setActiveTab('timetables')
-        },
-        {
-            label: 'CIE Compliance',
-            path: '/dashboard/principal/compliance',
-            icon: <ShieldCheck size={20} />,
-            isActive: activeTab === 'compliance',
-            onClick: () => setActiveTab('compliance')
-        },
-        {
-            label: 'Circulars & Notices',
-            path: '/dashboard/principal/circulars',
-            icon: <Bell size={20} />,
-            isActive: activeTab === 'circulars',
-            onClick: () => setActiveTab('circulars'),
-            badge: 2
-        },
-    ], [activeTab]);
+    // MENU ITEMS - format compatible with Sidebar component
+    const menuItems = [
+        { label: 'Overview', path: '#overview', icon: <LayoutDashboard size={20} />, isActive: activeTab === 'overview', onClick: () => setActiveTab('overview') },
+        { label: 'Departments', path: '#departments', icon: <Building size={20} />, isActive: activeTab === 'departments', onClick: () => setActiveTab('departments') },
+        { label: 'Faculty Directory', path: '#faculty', icon: <Briefcase size={20} />, isActive: activeTab === 'faculty', onClick: () => setActiveTab('faculty') },
+        { label: 'Student Search', path: '#directory', icon: <Users size={20} />, isActive: activeTab === 'directory', onClick: () => { setActiveTab('directory'); setSelectedDept(null); } },
+        { label: 'CIE Schedule', path: '#timetables', icon: <Calendar size={20} />, isActive: activeTab === 'timetables', onClick: () => setActiveTab('timetables') },
+        { label: 'CIE Compliance', path: '#compliance', icon: <ShieldCheck size={20} />, isActive: activeTab === 'compliance', onClick: () => setActiveTab('compliance') },
+        { label: 'Reports & Analytics', path: '#reports', icon: <FileText size={20} />, isActive: activeTab === 'reports', onClick: () => setActiveTab('reports') },
+        { label: 'Notifications', path: '#notifications', icon: <Bell size={20} />, isActive: activeTab === 'notifications', onClick: () => setActiveTab('notifications') }
+    ];
 
     /* Chart Configs and Helper Logic */
     const barData = useMemo(() => {
         if (!dashboardData) return null;
         return {
-            labels: dashboardData.branches,
+            labels: dashboardData.branches || ['CS', 'EC', 'ME', 'CV'],
             datasets: [{
                 label: 'Avg CIE Performance (%)',
-                data: dashboardData.branchPerformance,
-                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                data: dashboardData.branchPerformance || [0, 0, 0, 0],
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'],
                 borderRadius: 6
             }]
         };
     }, [dashboardData]);
 
+    const departments = useMemo(() => {
+        if (!dashboardData?.branches) return [];
+        return dashboardData.branches.map(branch => {
+            const hodInfo = dashboardData.hodSubmissionStatus?.find(h => h.dept === branch);
+            return {
+                id: branch,
+                name: (branch === 'CS' || branch === 'CSE') ? 'Computer Science' : branch === 'ME' ? 'Mechanical' : (branch === 'EC' || branch === 'ECE') ? 'Electronics' : branch === 'CV' ? 'Civil' : branch,
+                hod: hodInfo ? hodInfo.hod : 'Unknown',
+                color: (branch === 'CS' || branch === 'CSE') ? '#3b82f6' : branch === 'ME' ? '#f59e0b' : (branch === 'EC' || branch === 'ECE') ? '#8b5cf6' : '#10b981'
+            };
+        });
+    }, [dashboardData]);
+
     const handleDeptClick = useCallback((dept) => {
         setSelectedDept(dept);
-        const students = getStudentsByDept(dept.id);
-        setDeptStudents(students);
+        // Students are fetched by DirectorySection internally based on selectedDept
+        setDeptStudents([]);
     }, []);
 
-    const handleAddFaculty = useCallback(() => setActiveModal('faculty'), []);
-    const handleNewBroadcast = useCallback(() => setActiveModal('broadcast'), []);
-    const handleViewGrievance = useCallback((g) => {
-        setSelectedItem(g);
-        setActiveModal('grievance');
-    }, []);
+    const handleRemoveFaculty = useCallback(() => setActiveModal('removeFaculty'), []);
+
+    // const handleViewGrievance = useCallback((g) => {
+    //     setSelectedItem(g);
+    //     setActiveModal('grievance');
+    // }, []);
+
+    // --- Notification Handlers ---
+    const API_BASE_URL = 'http://127.0.0.1:8084/api';
+
+    const handleSendNotification = useCallback(async () => {
+        if (!msgText.trim()) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/notifications/broadcast`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    senderId: user?.username || 'principal',
+                    message: msgText,
+                    targetRole: msgRecipientType,
+                    department: msgTargetDept
+                })
+            });
+            const data = await res.json();
+            showToast(data.message || 'Message sent!', 'success');
+            setMsgText('');
+        } catch (err) {
+            console.error('Send notification error:', err);
+            showToast('Failed to send notification', 'error');
+        }
+    }, [msgText, msgRecipientType, msgTargetDept, user, showToast]);
+
+    const handleClearNotifications = useCallback(async () => {
+        try {
+            const token = user?.token;
+            await fetch(`${API_BASE_URL}/notifications/clear`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setNotifications([]);
+            showToast('Notifications cleared', 'info');
+        } catch (err) {
+            console.error('Clear notifications error:', err);
+            showToast('Failed to clear notifications', 'error');
+        }
+    }, [user, showToast]);
+
+    const handleDeleteNotification = useCallback(async (id) => {
+        try {
+            const token = user?.token;
+            await fetch(`${API_BASE_URL}/notifications/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setNotifications(prev => prev.filter(n => n.id !== id));
+        } catch (err) {
+            console.error('Delete notification error:', err);
+            showToast('Failed to delete notification', 'error');
+        }
+    }, [user, showToast]);
+
+    const handleLogout = () => {
+        logout();
+    };
 
     return (
         <DashboardLayout menuItems={menuItems}>
-            <div style={{ padding: '0' }}>
-                <header className={styles.header}>
-                    <div className={styles.welcomeText}>
-                        <h1>Hello, Dr. Gowri Shankar</h1>
-                        <p>Principal | Sanjay Gandhi Polytechnic</p>
+            {/* --- HEADER (Faculty-style) --- */}
+            <header className={styles.header}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <div>
+                        <h1 className={styles.welcomeText}>Hello, Dr. Gowri Shankar</h1>
+                        <p className={styles.subtitle}>Principal | Sanjay Gandhi Polytechnic</p>
                     </div>
                     <div className={styles.headerActions}>
-                        <button
-                            className={styles.secondaryBtn}
-                            onClick={() => alert("Downloading Full Institute Report...")}
-                            style={{ padding: '0.5rem', marginRight: '0.5rem', border: 'none', background: '#ecfdf5', color: '#059669', borderRadius: '8px', cursor: 'pointer' }}
-                            title="Download Full Report"
-                        >
-                            <FileText size={20} />
-                        </button>
-                        <StudentSentinel />
+                        <StudentSentinel students={deptStudents} />
                         <select className={styles.yearSelector}>
                             <option>Academic Year 2025-26</option>
-                            <option>Academic Year 2024-25</option>
                         </select>
                     </div>
-                </header>
-
-                {/* Dynamic Content */}
-                <div className={styles.sectionVisible}>
-                    {activeTab === 'overview' && (
-                        loading ? <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Dashboard Data...</div> :
-                            <OverviewSection
-                                stats={dashboardData?.stats}
-                                chartData={barData}
-                                branches={dashboardData?.branches}
-                                branchPerformance={dashboardData?.branchPerformance}
-                            />
-                    )}
-
-                    {activeTab === 'compliance' && <ComplianceSection />}
-
-                    {activeTab === 'directory' && <DirectorySection
-                        selectedDept={selectedDept}
-                        deptStudents={deptStudents}
-                        handleDeptClick={handleDeptClick}
-                        setSelectedDept={setSelectedDept}
-                    // setSelectedStudentProfile={setSelectedStudentProfile}
-                    />}
-
-                    {activeTab === 'faculty' && <FacultyDirectorySection onAdd={handleAddFaculty} />}
-                    {activeTab === 'timetables' && <TimetablesSection onDownload={handleDownload} />}
-                    {activeTab === 'circulars' && <CircularsSection onNewBroadcast={handleNewBroadcast} />}
-                    {activeTab === 'reports' && <ReportsSection onDownload={handleDownload} />}
-                    {activeTab === 'grievances' && <GrievancesSection onView={handleViewGrievance} />}
-
-                    {activeTab === 'exams' && (
-                        <div className={styles.sectionVisible}>
-                            <h2 className={styles.chartTitle}>Exam Section</h2>
-                            <div className={styles.glassCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem', color: '#64748b' }}>
-                                <ScrollText size={64} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                <h3>End-Semester Exam Management</h3>
-                                <p>Manage hall tickets, seating arrangements, and result analysis.</p>
-                                <button className={styles.primaryBtn} style={{ marginTop: '1rem' }}>Open Exam Portal</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'placements' && (
-                        <div className={styles.sectionVisible}>
-                            <h2 className={styles.chartTitle}>Placement Cell</h2>
-                            <div className={styles.glassCard} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem', color: '#64748b' }}>
-                                <Award size={64} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                                <h3>Placement & Career Services</h3>
-                                <p>Track campus drives, student offers, and industry partnerships.</p>
-                                <button className={styles.primaryBtn} style={{ marginTop: '1rem' }}>View Placement Stats</button>
-                            </div>
-                        </div>
-                    )}
                 </div>
+            </header>
+
+            {/* Dynamic Content */}
+            <div className={styles.sectionVisible}>
+                {activeTab === 'overview' && (
+                    loading ? <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading Dashboard...</div> :
+                        <OverviewSection
+                            stats={dashboardData?.stats}
+                            chartData={barData}
+                            branches={dashboardData?.branches}
+                            branchPerformance={dashboardData?.branchPerformance}
+                            lowPerformers={dashboardData?.lowPerformers}
+                            facultyAnalytics={dashboardData?.facultyAnalytics}
+                            schedule={dashboardData?.dates}
+                            approvals={dashboardData?.approvals}
+                            cieStats={dashboardData?.cieStats}
+                            trends={dashboardData?.trends}
+                            hodSubmissionStatus={dashboardData?.hodSubmissionStatus}
+                            onNavigate={setActiveTab}
+                        />
+                )}
+
+                {activeTab === 'compliance' && <ComplianceSection hodSubmissionStatus={dashboardData?.hodSubmissionStatus} />}
+
+                {activeTab === 'departments' && <DepartmentSection departments={departments} facultyList={facultyList} />}
+
+                {activeTab === 'directory' && <DirectorySection
+                    departments={departments}
+                    selectedDept={selectedDept}
+                    deptStudents={deptStudents}
+                    handleDeptClick={handleDeptClick}
+                    setSelectedDept={setSelectedDept}
+                />}
+
+                {activeTab === 'faculty' && <FacultyDirectorySection facultyMembers={facultyList} onRemove={handleRemoveFaculty} />}
+
+                {activeTab === 'timetables' && <CIEScheduleSection schedules={timetables} onDownload={handleDownload} />}
+                {activeTab === 'notifications' && <NotificationsSection
+                    notifications={notifications}
+                    recipientType={msgRecipientType}
+                    setRecipientType={setMsgRecipientType}
+                    targetDept={msgTargetDept}
+                    setTargetDept={setMsgTargetDept}
+                    messageText={msgText}
+                    setMessageText={setMsgText}
+                    onSend={handleSendNotification}
+                    onClear={handleClearNotifications}
+                    onDelete={handleDeleteNotification}
+                />}
+                {activeTab === 'reports' && <ReportsSection reports={reports} onDownload={handleDownload} />}
             </div>
 
             {/* Interaction Modals */}
             <ToastNotification show={toast.show} msg={toast.msg} type={toast.type} />
 
-            <SimpleModal isOpen={activeModal === 'faculty'} onClose={() => setActiveModal(null)} title="Add New Faculty">
-                <form onSubmit={handleSaveFaculty} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <input className={styles.searchBarInput} placeholder="Full Name" required style={{ border: '1px solid #e2e8f0' }} />
-                    <select className={styles.searchBarInput} style={{ border: '1px solid #e2e8f0' }}>
-                        <option>Computer Science</option>
-                        <option>Mechanical</option>
-                        <option>Civil</option>
-                    </select>
-                    <input className={styles.searchBarInput} placeholder="Designation" required style={{ border: '1px solid #e2e8f0' }} />
-                    <button type="submit" className={styles.primaryBtn} style={{ marginTop: '0.5rem', justifyContent: 'center' }}>Save Faculty</button>
+            <SimpleModal isOpen={activeModal === 'removeFaculty'} onClose={() => setActiveModal(null)} title="Remove Faculty">
+                <form onSubmit={(e) => { e.preventDefault(); setActiveModal(null); showToast('Faculty Removed', 'success'); }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                        Are you sure you want to remove a faculty member? This action cannot be undone.
+                    </p>
+                    <input className={styles.searchBarInput} placeholder="Enter Faculty ID to Remove" required style={{ border: '1px solid #e2e8f0' }} />
+                    <button type="submit" className={styles.primaryBtn} style={{ marginTop: '0.5rem', justifyContent: 'center', background: '#ef4444' }}>Confirm Removal</button>
                 </form>
             </SimpleModal>
-
-            <SimpleModal isOpen={activeModal === 'broadcast'} onClose={() => setActiveModal(null)} title="New Broadcast">
-                <form onSubmit={handleSendBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <input className={styles.searchBarInput} placeholder="Circular Title" required style={{ border: '1px solid #e2e8f0' }} />
-                    <textarea className={styles.notesArea} placeholder="Message content..." required style={{ border: '1px solid #e2e8f0', minHeight: '100px' }} />
-                    <div style={{ display: 'flex', gap: '1rem' }}>
-                        <label style={{ display: 'flex', gap: '0.5rem' }}><input type="checkbox" /> Students</label>
-                        <label style={{ display: 'flex', gap: '0.5rem' }}><input type="checkbox" defaultChecked /> Faculty</label>
-                    </div>
-                    <button type="submit" className={styles.primaryBtn} style={{ marginTop: '0.5rem', justifyContent: 'center', background: '#7c3aed' }}>Send Broadcast</button>
-                </form>
-            </SimpleModal>
-
-            <SimpleModal isOpen={activeModal === 'grievance'} onClose={() => setActiveModal(null)} title="Grievance Details">
-                {selectedItem && (
-                    <div style={{ padding: '0.5rem 0' }}>
-                        <p><strong>Student:</strong> {selectedItem.student}</p>
-                        <p><strong>Issue:</strong> {selectedItem.issue}</p>
-                        <p><strong>Date:</strong> {selectedItem.date}</p>
-                        <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-                            <button className={styles.primaryBtn} onClick={() => { setActiveModal(null); showToast('Marked as Resolved', 'success'); }}>Resolve</button>
-                            <button className={styles.secondaryBtn} onClick={() => setActiveModal(null)}>Close</button>
-                        </div>
-                    </div>
-                )}
-            </SimpleModal>
-        </DashboardLayout >
+        </DashboardLayout>
     );
 };
 

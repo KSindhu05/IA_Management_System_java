@@ -1,0 +1,10 @@
+Database connected.
+
+--- ALL FACULTY ---
+[85] FAC001 (Miss Manju Sree) - Dept: 'CS'
+[86] FAC002 (Ramesh Gouda) - Dept: 'CS'
+[87] FAC003 (Ramesh Gouda) - Dept: 'CS'
+[88] FAC004 (Wahida Banu) - Dept: 'CS'
+
+--- ALL HODs ---
+[2] HOD001 - Dept: 'CS'

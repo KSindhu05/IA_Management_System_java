@@ -1,0 +1,10 @@
+﻿id	username	full_name	role	department	designation	subjects
+1	PRINCIPAL	Dr. Gowri Shankar	PRINCIPAL	NULL	NULL	NULL
+2	HOD001	MD Jaffar	HOD	CS	NULL	NULL
+99	hod_cs	Test HOD CS	HOD	CS	NULL	NULL
+106	hod_cse	Head of CSE	HOD	CSE	NULL	NULL
+85	FAC001	Miss Manju Sree	FACULTY	CSE	Assistant Professor	Engineering Maths-II
+86	FAC002	Ramesh Gouda	FACULTY	CS	Assistant Professor	CAEG
+87	FAC003	Nasrin Banu	FACULTY	CS	Assistant Professor	English Communication
+88	FAC004	Wahida Banu	FACULTY	CS	Assistant Professor	Python, Indian Constitution
+105	101	Prof. Test Faculty	FACULTY	CSE	Professor	Advanced Java,DBMS
