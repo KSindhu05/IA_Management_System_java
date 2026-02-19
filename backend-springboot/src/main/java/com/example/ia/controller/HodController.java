@@ -378,18 +378,45 @@ public class HodController {
         }
     }
 
+    @Autowired
+    com.example.ia.repository.AttendanceRepository attendanceRepository;
+
+    @Autowired
+    com.example.ia.repository.NotificationRepository notificationRepository;
+
     @DeleteMapping("/students/{regNo}")
     @PreAuthorize("hasRole('HOD')")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<?> deleteStudent(@PathVariable String regNo) {
+        // 1. Find Student Entity
         var studentOpt = studentRepository.findByRegNo(regNo);
-        if (studentOpt.isEmpty()) {
+        if (studentOpt.isPresent()) {
+            com.example.ia.entity.Student student = studentOpt.get();
+            // Delete dependent data for Student
+            java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository.findByStudent_Id(student.getId());
+            if (!marks.isEmpty())
+                cieMarkRepository.deleteAll(marks);
+
+            java.util.List<com.example.ia.entity.Attendance> attendance = attendanceRepository
+                    .findByStudentId(student.getId());
+            if (!attendance.isEmpty())
+                attendanceRepository.deleteAll(attendance);
+
+            studentRepository.delete(student);
+        }
+
+        // 2. Find User Login
+        var userOpt = userRepository.findByUsernameIgnoreCase(regNo);
+        if (userOpt.isPresent()) {
+            com.example.ia.entity.User user = userOpt.get();
+            // Delete dependent data for User (Notifications)
+            notificationRepository.deleteByUserId(user.getId());
+            userRepository.delete(user);
+        }
+
+        if (studentOpt.isEmpty() && userOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        studentRepository.delete(studentOpt.get());
-
-        // Also delete the User login account
-        var userOpt = userRepository.findByUsernameIgnoreCase(regNo);
-        userOpt.ifPresent(userRepository::delete);
 
         return ResponseEntity.ok(Map.of("message", "Student deleted successfully"));
     }
@@ -422,5 +449,189 @@ public class HodController {
         userRepository.save(targetUser);
 
         return ResponseEntity.ok(Map.of("message", "Password reset successfully for " + username));
+    }
+
+    @PostMapping("/students/upload")
+    @PreAuthorize("hasRole('HOD')")
+    public ResponseEntity<?> uploadStudents(@RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("department") String department) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Please select a CSV file to upload."));
+        }
+
+        int successCount = 0;
+        int skipCount = 0;
+        List<String> errors = new java.util.ArrayList<>();
+
+        try (java.io.Reader reader = new java.io.InputStreamReader(file.getInputStream());
+                com.opencsv.CSVReader csvReader = new com.opencsv.CSVReader(reader)) {
+
+            List<String[]> records = csvReader.readAll();
+
+            // Expected Header: RegNo, Name, Semester, Section, Email, Phone, ParentPhone
+            // We skip header if present (simple check: if first row contains "RegNo")
+            int startIndex = 0;
+            if (!records.isEmpty() && records.get(0).length > 0 &&
+                    (records.get(0)[0].equalsIgnoreCase("RegNo") || records.get(0)[0].equalsIgnoreCase("RollNo"))) {
+                startIndex = 1;
+            }
+
+            for (int i = startIndex; i < records.size(); i++) {
+                String[] record = records.get(i);
+                // Ensure record has enough columns (at least RegNo and Name)
+                if (record.length < 2)
+                    continue;
+
+                String regNo = record[0].trim();
+                String name = record[1].trim();
+
+                if (regNo.isEmpty() || name.isEmpty()) {
+                    errors.add("Row " + (i + 1) + ": Missing RegNo or Name");
+                    continue;
+                }
+
+                // Optional fields
+                String semester = "1";
+                String section = "A";
+                String email = "";
+                String phone = "";
+                String parentPhone = "";
+                String password = regNo; // Default
+
+                // Check for "Sem / Sec" format (Reg No, Student Name, Sem / Sec, Parent Phone,
+                // [Password])
+                // 4-5 columns: RegNo[0], Name[1], Sem/Sec[2], ParentPhone[3], [Password[4]]
+                if (record.length <= 5 && record[0].matches(".*\\d.*")
+                        && (record.length > 2 && (record[2].contains("/") || record[2].contains("-")))) {
+                    // Heuristic: If 4-5 columns and col 2 contains "/" or "-", assume it's the
+                    // specific format
+                    if (record.length > 2) {
+                        String semSec = record[2].trim(); // e.g., "2 / B" or "2 - B"
+                        if (semSec.contains("/")) {
+                            String[] parts = semSec.split("/");
+                            if (parts.length > 0)
+                                semester = parts[0].trim();
+                            if (parts.length > 1)
+                                section = parts[1].trim();
+                        } else if (semSec.contains("-")) {
+                            String[] parts = semSec.split("-");
+                            if (parts.length > 0)
+                                semester = parts[0].trim();
+                            if (parts.length > 1)
+                                section = parts[1].trim();
+                        }
+                    }
+                    if (record.length > 3)
+                        parentPhone = record[3].trim();
+                    if (record.length > 4 && !record[4].trim().isEmpty())
+                        password = record[4].trim();
+
+                    // Generate missing fields
+                    email = regNo.toLowerCase() + "@student.college.edu";
+                } else {
+                    // Standard Format: RegNo, Name, Semester, Section, Email, Phone, ParentPhone,
+                    // [Password]
+                    semester = record.length > 2 ? record[2].trim() : "1";
+                    section = record.length > 3 ? record[3].trim() : "A";
+                    email = record.length > 4 ? record[4].trim() : "";
+                    phone = record.length > 5 ? record[5].trim() : "";
+                    parentPhone = record.length > 6 ? record[6].trim() : "";
+                    if (record.length > 7 && !record[7].trim().isEmpty())
+                        password = record[7].trim();
+                }
+
+                // Check if already exists
+                if (studentRepository.findByRegNo(regNo).isPresent() || userRepository.existsByUsername(regNo)) {
+                    skipCount++;
+                    continue;
+                }
+
+                try {
+                    // 1. Create User
+                    User studentUser = new User();
+                    studentUser.setUsername(regNo);
+                    studentUser.setFullName(name);
+                    studentUser.setEmail(email.isEmpty() ? regNo + "@student.college.edu" : email);
+                    studentUser.setDepartment(department);
+                    studentUser.setRole("STUDENT");
+                    studentUser.setSemester(semester);
+                    studentUser.setSection(section);
+                    studentUser.setPassword(passwordEncoder.encode(password));
+                    userRepository.save(studentUser);
+
+                    // 2. Create Student
+                    com.example.ia.entity.Student student = new com.example.ia.entity.Student();
+                    student.setRegNo(regNo);
+                    student.setName(name);
+                    student.setDepartment(department);
+                    try {
+                        student.setSemester(Integer.parseInt(semester));
+                    } catch (NumberFormatException e) {
+                        student.setSemester(1);
+                    }
+                    student.setSection(section);
+                    student.setEmail(email);
+                    student.setPhone(phone);
+                    student.setParentPhone(parentPhone);
+                    studentRepository.save(student);
+
+                    successCount++;
+                } catch (Exception e) {
+                    errors.add("Row " + (i + 1) + " (" + regNo + "): " + e.getMessage());
+                }
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "File processed successfully");
+            response.put("added", successCount);
+            response.put("skipped", skipCount);
+            response.put("errors", errors);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("message", "Failed to parse CSV file: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/students/bulk")
+    @PreAuthorize("hasRole('HOD')")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> deleteStudentsBulk(@RequestBody List<String> regNos) {
+        if (regNos == null || regNos.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "No students selected"));
+        }
+
+        int deletedCount = 0;
+        for (String regNo : regNos) {
+            // 1. Find Student Entity
+            var studentOpt = studentRepository.findByRegNo(regNo);
+            if (studentOpt.isPresent()) {
+                com.example.ia.entity.Student student = studentOpt.get();
+                // Delete dependent data
+                java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository
+                        .findByStudent_Id(student.getId());
+                if (!marks.isEmpty())
+                    cieMarkRepository.deleteAll(marks);
+
+                java.util.List<com.example.ia.entity.Attendance> attendance = attendanceRepository
+                        .findByStudentId(student.getId());
+                if (!attendance.isEmpty())
+                    attendanceRepository.deleteAll(attendance);
+
+                studentRepository.delete(student);
+            }
+
+            // 2. Find User Login
+            var userOpt = userRepository.findByUsernameIgnoreCase(regNo);
+            if (userOpt.isPresent()) {
+                com.example.ia.entity.User user = userOpt.get();
+                notificationRepository.deleteByUserId(user.getId());
+                userRepository.delete(user);
+            }
+
+            deletedCount++;
+        }
+
+        return ResponseEntity.ok(Map.of("message", "Deleted " + deletedCount + " students successfully"));
     }
 }

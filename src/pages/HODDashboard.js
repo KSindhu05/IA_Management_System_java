@@ -5,7 +5,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import {
     LayoutDashboard, Users, FileText, CheckCircle, TrendingUp, BarChart2,
     AlertTriangle, Briefcase, Bell, Activity, Clock, Award,
-    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus
+    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus, Upload
 } from 'lucide-react';
 import {
     departments, subjectsByDept, getStudentsByDept, englishMarks, mathsMarks,
@@ -54,6 +54,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     // Filter State for "All Students"
     const [studentFilterSem, setStudentFilterSem] = useState('all');
     const [studentFilterSec, setStudentFilterSec] = useState('all');
+    const [selectedStudents, setSelectedStudents] = useState([]);
 
     // Spectator Mode Effect
     useEffect(() => {
@@ -1081,17 +1082,135 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         }
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!window.confirm(`Are you sure you want to upload "${file.name}"? This will add students to the ${selectedDept} department.`)) {
+            e.target.value = null; // Reset input
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('department', selectedDept);
+
+        try {
+            const token = user?.token;
+            const headers = token ? { 'Authorization': `Bearer ${token}` } : {}; // No Content-Type for FormData, browser sets it
+
+            // Show loading state if desired (optional)
+            // setClientLoading(true); 
+
+            const response = await fetch(`${API_BASE_URL}/hod/students/upload`, {
+                method: 'POST',
+                headers,
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                let msg = result.message;
+                if (result.added !== undefined) msg += `\n\n✅ Added: ${result.added}`;
+                if (result.skipped !== undefined) msg += `\n⚠️ Skipped: ${result.skipped}`;
+                if (result.errors && result.errors.length > 0) {
+                    msg += `\n\n❌ Errors:\n${result.errors.slice(0, 5).join('\n')}`;
+                    if (result.errors.length > 5) msg += `\n...and ${result.errors.length - 5} more errors.`;
+                }
+                alert(msg);
+                window.location.reload();
+            } else {
+                alert(`Upload Failed: ${result.message}`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Error uploading file');
+        } finally {
+            e.target.value = null; // Reset input
+        }
+    };
+
+    const toggleSelectStudent = (regNo) => {
+        if (selectedStudents.includes(regNo)) {
+            setSelectedStudents(selectedStudents.filter(id => id !== regNo));
+        } else {
+            setSelectedStudents([...selectedStudents, regNo]);
+        }
+    };
+
+    const toggleSelectAll = (filteredStudents) => {
+        const allRegNos = filteredStudents.map(s => s.regNo);
+        const allSelected = allRegNos.every(r => selectedStudents.includes(r));
+
+        if (allSelected) {
+            // Deselect all visible
+            setSelectedStudents(selectedStudents.filter(id => !allRegNos.includes(id)));
+        } else {
+            // Select all visible (merge unique)
+            const newSelection = [...new Set([...selectedStudents, ...allRegNos])];
+            setSelectedStudents(newSelection);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!window.confirm(`Are you sure you want to delete ${selectedStudents.length} students? This action cannot be undone.`)) return;
+
+        const headers = {
+            'Authorization': `Bearer ${user.token}`,
+            'Content-Type': 'application/json'
+        };
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/hod/students/bulk`, {
+                method: 'DELETE',
+                headers,
+                body: JSON.stringify(selectedStudents)
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                alert(result.message);
+                setSelectedStudents([]);
+                // Reload data
+                window.location.reload();
+            } else {
+                alert("Failed to delete students: " + result.message);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error deleting students");
+        }
+    };
+
     const renderStudentManagement = () => {
+        // Calculate available sections
+        const allSections = [...new Set(deptStudents.map(s => s.section || 'A'))].sort();
+
         const filteredStudents = deptStudents.filter(std => {
             const semMatch = studentFilterSem === 'all' || std.semester == studentFilterSem;
             const secMatch = studentFilterSec === 'all' || (std.section && std.section.toUpperCase() === studentFilterSec);
             return semMatch && secMatch;
         });
 
+        const allVisibleSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedStudents.includes(s.regNo));
+
         return (
             <div className={styles.sectionContainer}>
                 <div className={styles.sectionHeader} style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h2 className={styles.sectionTitle} style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1e293b' }}>Student Management ({filteredStudents.length})</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <h2 className={styles.sectionTitle} style={{ fontSize: '1.5rem', fontWeight: 600, color: '#1e293b' }}>Student Management ({filteredStudents.length})</h2>
+                        {selectedStudents.length > 0 && (
+                            <button
+                                className={styles.secondaryBtn}
+                                onClick={handleBulkDelete}
+                                style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', padding: '0.4rem 0.8rem' }}
+                            >
+                                <Trash2 size={16} /> Delete Selected ({selectedStudents.length})
+                            </button>
+                        )}
+                    </div>
+
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         <select className={styles.deptSelect} value={studentFilterSem} onChange={(e) => setStudentFilterSem(e.target.value)} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
                             <option value="all">All Semesters</option>
@@ -1099,9 +1218,32 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 <option key={sem} value={sem}>{sem}{sem === 1 ? 'st' : sem === 2 ? 'nd' : sem === 3 ? 'rd' : 'th'} Semester</option>
                             ))}
                         </select>
+                        <select className={styles.deptSelect} value={studentFilterSec} onChange={(e) => setStudentFilterSec(e.target.value)} style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                            <option value="all">All Sections</option>
+                            {allSections.map(sec => (
+                                <option key={sec} value={sec}>Section {sec}</option>
+                            ))}
+                        </select>
+
                         <button className={styles.primaryBtn} onClick={() => setShowAddStudentModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <UserPlus size={16} /> Add New Student
                         </button>
+                        <div>
+                            <input
+                                type="file"
+                                id="csvUpload"
+                                accept=".csv"
+                                style={{ display: 'none' }}
+                                onChange={handleFileUpload}
+                            />
+                            <button
+                                className={styles.secondaryBtn}
+                                onClick={() => document.getElementById('csvUpload').click()}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ecfdf5', color: '#059669', border: '1px solid #d1fae5' }}
+                            >
+                                <Upload size={16} /> Bulk Upload CSV
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1109,22 +1251,36 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                     <table className={styles.table}>
                         <thead>
                             <tr>
+                                <th style={{ width: '40px' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={allVisibleSelected}
+                                        onChange={() => toggleSelectAll(filteredStudents)}
+                                    />
+                                </th>
                                 <th style={{ width: '60px' }}>Sl. No</th>
                                 <th>Reg No</th>
                                 <th>Student Name</th>
                                 <th>Sem / Sec</th>
-                                <th>Email</th>
+
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredStudents.length > 0 ? filteredStudents.map((std, index) => (
-                                <tr key={std.id}>
+                                <tr key={std.id} className={selectedStudents.includes(std.regNo) ? styles.selectedRow : ''} style={selectedStudents.includes(std.regNo) ? { backgroundColor: '#f1f5f9' } : {}}>
+                                    <td>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedStudents.includes(std.regNo)}
+                                            onChange={() => toggleSelectStudent(std.regNo)}
+                                        />
+                                    </td>
                                     <td style={{ color: '#64748b' }}>{index + 1}</td>
                                     <td style={{ fontWeight: 600, color: '#1e293b' }}>{std.regNo}</td>
                                     <td>{std.name}</td>
                                     <td>{std.semester} - {std.section || 'A'}</td>
-                                    <td>{std.email || '-'}</td>
+
                                     <td>
                                         <div style={{ display: 'flex', gap: '6px' }}>
                                             <button className={styles.secondaryBtn} onClick={() => openResetPasswordModal(std.regNo, std.name, 'STUDENT')} style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }} title="Reset Password">
