@@ -201,9 +201,9 @@ const FacultyDashboard = () => {
             const headers = { 'Authorization': `Bearer ${user.token}` };
             console.log("Fetching initial data for faculty...");
 
-            // Fetch Students
+            // Fetch Students (filtered by faculty's assigned sections)
             try {
-                const sRes = await fetch(`${API_BASE_URL}/student/all`, { headers });
+                const sRes = await fetch(`${API_BASE_URL}/faculty/my-students`, { headers });
                 console.log("Students API status:", sRes.status);
                 if (sRes.ok) {
                     const data = await sRes.json();

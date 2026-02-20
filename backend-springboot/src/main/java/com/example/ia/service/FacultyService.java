@@ -1,19 +1,23 @@
 package com.example.ia.service;
 
 import com.example.ia.entity.CieMark;
+import com.example.ia.entity.Student;
 import com.example.ia.entity.Subject;
 import com.example.ia.entity.User;
 import com.example.ia.payload.response.FacultyClassAnalytics;
 import com.example.ia.repository.CieMarkRepository;
+import com.example.ia.repository.StudentRepository;
 import com.example.ia.repository.SubjectRepository;
 import com.example.ia.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class FacultyService {
@@ -27,6 +31,41 @@ public class FacultyService {
     @Autowired
     private CieMarkRepository cieMarkRepository;
 
+    @Autowired
+    private StudentRepository studentRepository;
+
+    // ---------------------------------------------------------------
+    // Parse the comma-separated section field into a list of sections.
+    // e.g. "A,B" → ["A", "B"]
+    // ---------------------------------------------------------------
+    private List<String> parseSections(User user) {
+        if (user.getSection() == null || user.getSection().isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(user.getSection().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+    }
+
+    // ---------------------------------------------------------------
+    // Returns students this faculty is allowed to see.
+    // Filters by their assigned sections. If no sections set,
+    // returns ALL students (fallback so nothing breaks).
+    // ---------------------------------------------------------------
+    public List<Student> getStudentsForFaculty(String username) {
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null)
+            return List.of();
+
+        List<String> sections = parseSections(user);
+        if (sections.isEmpty()) {
+            // No section restriction set — return all students
+            return studentRepository.findAll();
+        }
+        return studentRepository.findBySectionIn(sections);
+    }
+
     public List<Subject> getSubjectsForFaculty(String username) {
         User user = userRepository.findByUsername(username).orElse(null);
         if (user == null)
@@ -37,6 +76,9 @@ public class FacultyService {
     }
 
     public FacultyClassAnalytics getAnalytics(String username) {
+        User user = userRepository.findByUsername(username).orElse(null);
+        List<String> allowedSections = user != null ? parseSections(user) : List.of();
+
         List<Subject> subjects = getSubjectsForFaculty(username);
         double totalScore = 0;
         int scoredCount = 0;
@@ -48,12 +90,17 @@ public class FacultyService {
         for (Subject sub : subjects) {
             List<CieMark> marks = cieMarkRepository.findBySubject_Id(sub.getId());
             for (CieMark mark : marks) {
-                // Every student with a mark record is counted as evaluated
-                if (mark.getStudent() != null) {
-                    uniqueStudents.add(mark.getStudent().getId());
+                if (mark.getStudent() == null)
+                    continue;
+
+                // If faculty has section restrictions, skip students outside those sections
+                if (!allowedSections.isEmpty() &&
+                        !allowedSections.contains(mark.getStudent().getSection())) {
+                    continue;
                 }
 
-                // For avg/low/top calculations, only use marks with actual values > 0
+                uniqueStudents.add(mark.getStudent().getId());
+
                 if (mark.getMarks() != null && mark.getMarks() > 0) {
                     double score = mark.getMarks();
                     totalScore += score;
@@ -73,11 +120,8 @@ public class FacultyService {
             }
         }
 
-        // All students with records are evaluated, pending = 0
         int evaluated = uniqueStudents.size();
         int pending = 0;
-
-        // Average as percentage of max marks (50)
         double avg = scoredCount > 0 ? Math.round((totalScore / scoredCount / 50.0 * 100) * 10.0) / 10.0 : 0;
         return new FacultyClassAnalytics(evaluated, pending, avg, low, top, uniqueStudents.size(), lowList);
     }

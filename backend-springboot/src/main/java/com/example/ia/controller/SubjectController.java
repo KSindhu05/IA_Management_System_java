@@ -75,4 +75,37 @@ public class SubjectController {
         }
         return ResponseEntity.notFound().build();
     }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('HOD')")
+    public ResponseEntity<?> updateSubject(@PathVariable Long id, @RequestBody Map<String, Object> data) {
+        return subjectRepository.findById(id).map(subject -> {
+            String name = data.getOrDefault("name", "").toString().trim();
+            String code = data.getOrDefault("code", "").toString().trim();
+
+            if (name.isEmpty() || code.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "Subject name and code are required."));
+            }
+
+            // Check if code is being changed and if new code already exists
+            if (!subject.getCode().equals(code) && subjectRepository.findByCode(code).isPresent()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "A subject with code '" + code + "' already exists."));
+            }
+
+            subject.setName(name);
+            subject.setCode(code);
+
+            if (data.containsKey("semester") && data.get("semester") != null) {
+                subject.setSemester(Integer.parseInt(data.get("semester").toString()));
+            }
+            if (data.containsKey("instructorName") && data.get("instructorName") != null) {
+                subject.setInstructorName(data.get("instructorName").toString().trim());
+            }
+
+            subjectRepository.save(subject);
+            return ResponseEntity.ok(subject);
+        }).orElse(ResponseEntity.notFound().build());
+    }
 }

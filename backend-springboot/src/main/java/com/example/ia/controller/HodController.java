@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -317,12 +318,27 @@ public class HodController {
 
     @DeleteMapping("/faculty/{id}")
     @PreAuthorize("hasRole('HOD')")
+    @Transactional
     public ResponseEntity<?> deleteFaculty(@PathVariable Long id) {
-        if (userRepository.existsById(id)) {
-            userRepository.deleteById(id);
-            return ResponseEntity.ok(Map.of("message", "Faculty deleted"));
-        }
-        return ResponseEntity.notFound().build();
+        return userRepository.findById(id).map(faculty -> {
+            // 1. Clear instructorName in Subjects table
+            if (faculty.getFullName() != null) {
+                List<com.example.ia.entity.Subject> subjects = subjectRepository
+                        .findByInstructorName(faculty.getFullName());
+                for (com.example.ia.entity.Subject sub : subjects) {
+                    sub.setInstructorName(null);
+                }
+                subjectRepository.saveAll(subjects);
+            }
+
+            // 2. Delete notifications for this user
+            notificationRepository.deleteByUserId(faculty.getId());
+
+            // 3. Delete user account
+            userRepository.delete(faculty);
+
+            return ResponseEntity.ok(Map.of("message", "Faculty deleted and associated data cleaned up"));
+        }).orElse(ResponseEntity.notFound().build());
     }
 
     // ========== STUDENT MANAGEMENT ==========
