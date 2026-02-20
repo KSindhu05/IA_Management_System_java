@@ -10,4 +10,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     List<Attendance> findByStudentId(Long studentId);
 
     List<Attendance> findBySubjectId(Long subjectId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByFaculty(com.example.ia.entity.User faculty);
 }

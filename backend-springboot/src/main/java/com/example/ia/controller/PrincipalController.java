@@ -3,6 +3,9 @@ package com.example.ia.controller;
 import com.example.ia.entity.Announcement;
 import com.example.ia.entity.CieMark;
 import com.example.ia.entity.Student;
+import com.example.ia.entity.Attendance;
+import com.example.ia.repository.AttendanceRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.ia.entity.Subject;
 import com.example.ia.entity.User;
@@ -16,6 +19,7 @@ import com.example.ia.repository.NotificationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -43,6 +47,12 @@ public class PrincipalController {
 
     @Autowired
     NotificationRepository notificationRepository;
+
+    @Autowired
+    AttendanceRepository attendanceRepository;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
 
     @GetMapping("/dashboard")
     @PreAuthorize("hasRole('PRINCIPAL')")
@@ -259,5 +269,56 @@ public class PrincipalController {
     @PreAuthorize("hasRole('PRINCIPAL')")
     public List<Student> getStudentsByDepartment(@PathVariable String deptId) {
         return studentRepository.findByDepartment(deptId);
+    }
+
+    // ========== HOD MANAGEMENT ==========
+
+    @GetMapping("/hods")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public List<User> getAllHods() {
+        return userRepository.findByRole("HOD");
+    }
+
+    @PostMapping("/hod")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<?> createHod(@RequestBody User hodData) {
+        if (userRepository.existsByUsername(hodData.getUsername())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Username already exists"));
+        }
+        User hod = new User();
+        hod.setUsername(hodData.getUsername());
+        hod.setFullName(hodData.getFullName());
+        hod.setEmail(hodData.getEmail());
+        hod.setDepartment(hodData.getDepartment());
+        hod.setRole("HOD");
+        hod.setPassword(passwordEncoder.encode("password123")); // Default password
+        userRepository.save(hod);
+        return ResponseEntity.ok(hod);
+    }
+
+    @PutMapping("/hod/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<?> updateHod(@PathVariable Long id, @RequestBody User hodData) {
+        return userRepository.findById(id).map(hod -> {
+            hod.setFullName(hodData.getFullName());
+            hod.setEmail(hodData.getEmail());
+            hod.setDepartment(hodData.getDepartment());
+            userRepository.save(hod);
+            return ResponseEntity.ok(hod);
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/hod/{id}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    @Transactional
+    public ResponseEntity<?> deleteHod(@PathVariable Long id) {
+        return userRepository.findById(id).map(hod -> {
+            // Clean up related data
+            notificationRepository.deleteByUserId(id);
+            announcementRepository.deleteByFaculty(hod);
+            attendanceRepository.deleteByFaculty(hod);
+            userRepository.delete(hod);
+            return ResponseEntity.ok(Map.of("message", "HOD removed successfully"));
+        }).orElse(ResponseEntity.notFound().build());
     }
 }

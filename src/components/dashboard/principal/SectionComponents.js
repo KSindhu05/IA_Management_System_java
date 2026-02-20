@@ -1,6 +1,6 @@
 import React, { memo, useState, useMemo } from 'react';
 
-import { Calendar, Download, Bell, FileText, Search, UserMinus, Briefcase, Clock, Mail, Phone, MapPin, Building, UserCheck, AlertTriangle, X, Trash2, Send } from 'lucide-react';
+import { Calendar, Download, Bell, FileText, Search, UserMinus, Briefcase, Clock, Mail, Phone, MapPin, Building, UserCheck, AlertTriangle, X, Trash2, Send, ShieldCheck, RefreshCw, Edit2, Edit3 } from 'lucide-react';
 import { SimpleModal } from './Shared';
 import styles from '../../../pages/PrincipalDashboard.module.css';
 
@@ -488,3 +488,238 @@ export const ReportsSection = memo(({ reports = [], onDownload }) => (
         </div>
     </div>
 ));
+
+export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments = [], onRefresh, onUpdate, onDelete }) => {
+    const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const [department, setDepartment] = useState('');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [editingHod, setEditingHod] = useState(null);
+
+    const handleRefresh = async () => {
+        if (!onRefresh) return;
+        setIsRefreshing(true);
+        await onRefresh();
+        setIsRefreshing(false);
+    };
+
+    const handleEdit = (hod) => {
+        setEditingHod(hod);
+        setName(hod.fullName);
+        setUsername(hod.username);
+        setEmail(hod.email || '');
+        setDepartment(hod.department);
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingHod(null);
+        setName('');
+        setUsername('');
+        setEmail('');
+        setDepartment('');
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!name || (!editingHod && !username) || !department) {
+            alert('Name and Department are required.');
+            return;
+        }
+
+        if (editingHod) {
+            await onUpdate(editingHod.id, { fullName: name, email, department });
+            setEditingHod(null);
+        } else {
+            await onCreate({ fullName: name, username, email, department });
+        }
+
+        // Reset form
+        setName('');
+        setUsername('');
+        setEmail('');
+        setDepartment('');
+    };
+
+    return (
+        <div className={styles.sectionVisible}>
+            {/* --- HOD BANNER --- */}
+            <div className={styles.hodBanner}>
+                <div className={styles.hodBannerDecorator}></div>
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0.5rem' }}>
+                            <div style={{ padding: '6px', background: 'rgba(255,255,255,0.2)', borderRadius: '10px', backdropFilter: 'blur(4px)' }}>
+                                <ShieldCheck size={20} color="white" />
+                            </div>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', opacity: 0.9 }}>Administrative Control</span>
+                        </div>
+                        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Department Leadership</h1>
+                        <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.9rem', opacity: 0.9, maxWidth: '600px' }}>
+                            Manage and register Head of Departments. Assigned HODs will have full administrative access to their respective department rosters and CIE management.
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleRefresh}
+                        className={styles.secondaryBtn}
+                        style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                        {isRefreshing ? 'Fetching...' : 'Refresh List'}
+                    </button>
+                </div>
+            </div>
+
+            <div className={styles.glassCard} style={{ padding: '2.5rem', marginBottom: '2.5rem', borderRadius: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '4px', height: '24px', background: editingHod ? '#f59e0b' : '#8b5cf6', borderRadius: '2px' }}></div>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+                            {editingHod ? 'Update HOD Details' : 'HOD Registration'}
+                        </h3>
+                    </div>
+                    {editingHod && (
+                        <button
+                            onClick={handleCancelEdit}
+                            className={styles.secondaryBtn}
+                            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                        >
+                            Cancel Edit
+                        </button>
+                    )}
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                    <div className={styles.formGrid}>
+                        <div className={styles.formGroup}>
+                            <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>Full Name *</label>
+                            <input
+                                className={styles.inputField}
+                                placeholder="e.g. Dr. John Doe"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className={styles.formGroup}>
+                            <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>Employee ID (Username) *</label>
+                            <input
+                                className={styles.inputField}
+                                placeholder="e.g. HODCS01"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                required
+                                disabled={!!editingHod}
+                            />
+                        </div>
+                        <div className={styles.formGroup}>
+                            <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>Institutional Email</label>
+                            <input
+                                className={styles.inputField}
+                                type="email"
+                                placeholder="e.g. john.doe@sgp.edu"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </div>
+                        <div className={styles.formGroup}>
+                            <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>Assigned Department *</label>
+                            <select
+                                className={styles.inputField}
+                                value={department}
+                                onChange={(e) => setDepartment(e.target.value)}
+                                required
+                            >
+                                <option value="">Select Department</option>
+                                {departments.map(d => (
+                                    <option key={d.id} value={d.id}>{d.name} ({d.id})</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.85rem', background: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: '8px' }}>
+                            <AlertTriangle size={16} />
+                            <span>{editingHod ? 'ID cannot be changed for security reasons.' : 'Default password is password123'}</span>
+                        </div>
+                        <button type="submit" className={editingHod ? styles.primaryBtn : styles.submitBtn} style={editingHod ? { background: '#f59e0b' } : {}}>
+                            {editingHod ? <><RefreshCw size={20} /> Update Information</> : <><UserCheck size={20} /> Register & Grant Access</>}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div className={styles.tableCard} style={{ borderRadius: '24px', padding: '0' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>Institutional HOD Directory</h3>
+                    <span style={{ padding: '4px 12px', background: '#f1f5f9', color: '#64748b', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {hods.length} Active HODs
+                    </span>
+                </div>
+                <table className={styles.table}>
+                    <thead>
+                        <tr>
+                            <th style={{ paddingLeft: '2rem' }}>Sl. No</th>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Email</th>
+                            <th style={{ paddingRight: '2rem', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {hods.map((h, index) => (
+                            <tr key={h.id}>
+                                <td style={{ paddingLeft: '2rem', color: '#64748b', fontWeight: 500 }}>{index + 1}</td>
+                                <td style={{ fontFamily: 'monospace', fontWeight: 600, color: '#334155' }}>{h.username}</td>
+                                <td>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#f5f3ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                                            {h.fullName.charAt(0)}
+                                        </div>
+                                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{h.fullName}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span style={{ padding: '4px 10px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', fontWeight: 700, fontSize: '0.8rem' }}>
+                                        {h.department}
+                                    </span>
+                                </td>
+                                <td style={{ color: '#64748b' }}>{h.email || <span style={{ opacity: 0.5 }}>—</span>}</td>
+                                <td style={{ paddingRight: '2rem', textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                        <button
+                                            onClick={() => handleEdit(h)}
+                                            style={{ padding: '6px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', cursor: 'pointer', transition: 'all 0.2s' }}
+                                            title="Edit HOD"
+                                        >
+                                            <Edit3 size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => { if (window.confirm(`Are you sure you want to remove ${h.fullName}?`)) onDelete(h.id); }}
+                                            style={{ padding: '6px', borderRadius: '8px', border: '1px solid #fee2e2', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }}
+                                            title="Delete HOD"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {hods.length === 0 && (
+                            <tr>
+                                <td colSpan="6" style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
+                                    <ShieldCheck size={48} style={{ marginBottom: '1rem', opacity: 0.1 }} />
+                                    <p style={{ margin: 0, fontSize: '1rem' }}>No HODs have been registered yet.</p>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+});

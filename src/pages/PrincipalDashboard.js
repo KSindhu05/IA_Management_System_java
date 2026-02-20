@@ -18,12 +18,12 @@ import DepartmentSection from '../components/dashboard/principal/DepartmentSecti
 import { DirectorySection } from '../components/dashboard/principal/DirectorySection';
 import {
     FacultyDirectorySection, CIEScheduleSection,
-    ReportsSection, NotificationsSection
+    ReportsSection, NotificationsSection, ManageHODsSection
 } from '../components/dashboard/principal/SectionComponents';
 
 import {
     fetchPrincipalDashboard, fetchAllFaculty, fetchTimetables,
-    fetchNotifications, fetchReports
+    fetchNotifications, fetchReports, fetchHods, createHod, updateHod, deleteHod
 } from '../services/api';
 
 const PrincipalDashboard = () => {
@@ -33,6 +33,7 @@ const PrincipalDashboard = () => {
     // Data States
     const [dashboardData, setDashboardData] = useState(null);
     const [facultyList, setFacultyList] = useState([]);
+    const [hodList, setHodList] = useState([]);
     const [timetables, setTimetables] = useState([]);
     const [notifications, setNotifications] = useState([]);
     const [reports, setReports] = useState([]);
@@ -65,12 +66,14 @@ const PrincipalDashboard = () => {
                 const [
                     dashData,
                     faculty,
+                    hods,
                     times,
                     notifs,
                     reps
                 ] = await Promise.all([
                     fetchPrincipalDashboard(token),
                     fetchAllFaculty(token),
+                    fetchHods(token),
                     fetchTimetables(token),
                     fetchNotifications(token),
                     fetchReports(token)
@@ -78,6 +81,12 @@ const PrincipalDashboard = () => {
 
                 if (dashData) setDashboardData(dashData);
                 if (faculty) setFacultyList(faculty);
+                if (hods) {
+                    console.log("DEBUG: HODs fetched:", hods);
+                    setHodList(hods);
+                } else {
+                    console.warn("DEBUG: HODs fetch returned null/undefined");
+                }
                 if (times) setTimetables(times);
                 if (notifs) setNotifications(notifs);
                 if (reps) setReports(reps);
@@ -112,6 +121,7 @@ const PrincipalDashboard = () => {
     const menuItems = [
         { label: 'Overview', path: '#overview', icon: <LayoutDashboard size={20} />, isActive: activeTab === 'overview', onClick: () => setActiveTab('overview') },
         { label: 'Departments', path: '#departments', icon: <Building size={20} />, isActive: activeTab === 'departments', onClick: () => setActiveTab('departments') },
+        { label: 'Manage HODs', path: '#hods', icon: <ShieldCheck size={20} />, isActive: activeTab === 'hod-management', onClick: () => setActiveTab('hod-management') },
         { label: 'Faculty Directory', path: '#faculty', icon: <Briefcase size={20} />, isActive: activeTab === 'faculty', onClick: () => setActiveTab('faculty') },
         { label: 'Student Search', path: '#directory', icon: <Users size={20} />, isActive: activeTab === 'directory', onClick: () => { setActiveTab('directory'); setSelectedDept(null); } },
         { label: 'CIE Schedule', path: '#timetables', icon: <Calendar size={20} />, isActive: activeTab === 'timetables', onClick: () => setActiveTab('timetables') },
@@ -214,6 +224,52 @@ const PrincipalDashboard = () => {
         }
     }, [user, showToast]);
 
+    const handleCreateHod = useCallback(async (hodData) => {
+        try {
+            const token = user?.token;
+            const newHod = await createHod(token, hodData);
+            setHodList(prev => [...prev, newHod]);
+            showToast('HOD Registered Successfully', 'success');
+        } catch (error) {
+            showToast('Failed to register HOD: ' + error.message, 'error');
+        }
+    }, [user, showToast]);
+
+    const handleRefreshHods = useCallback(async () => {
+        try {
+            const token = user?.token;
+            const hods = await fetchHods(token);
+            if (hods) {
+                setHodList(hods);
+                showToast('HOD List Updated', 'success');
+            }
+        } catch (error) {
+            showToast('Failed to refresh HODs', 'error');
+        }
+    }, [user, showToast]);
+
+    const handleUpdateHod = useCallback(async (id, hodData) => {
+        try {
+            const token = user?.token;
+            const updated = await updateHod(token, id, hodData);
+            setHodList(prev => prev.map(h => h.id === id ? updated : h));
+            showToast('HOD Updated Successfully', 'success');
+        } catch (error) {
+            showToast('Failed to update HOD: ' + error.message, 'error');
+        }
+    }, [user, showToast]);
+
+    const handleDeleteHod = useCallback(async (id) => {
+        try {
+            const token = user?.token;
+            await deleteHod(token, id);
+            setHodList(prev => prev.filter(h => h.id !== id));
+            showToast('HOD Removed Successfully', 'success');
+        } catch (error) {
+            showToast('Failed to remove HOD: ' + error.message, 'error');
+        }
+    }, [user, showToast]);
+
     const handleLogout = () => {
         logout();
     };
@@ -267,6 +323,18 @@ const PrincipalDashboard = () => {
                     handleDeptClick={handleDeptClick}
                     setSelectedDept={setSelectedDept}
                 />}
+
+                {activeTab === 'hod-management' && (
+                    <ManageHODsSection
+                        hods={hodList}
+                        onCreate={handleCreateHod}
+                        onUpdate={handleUpdateHod}
+                        onDelete={handleDeleteHod}
+                        user={user}
+                        departments={departments}
+                        onRefresh={handleRefreshHods}
+                    />
+                )}
 
                 {activeTab === 'faculty' && <FacultyDirectorySection facultyMembers={facultyList} onRemove={handleRemoveFaculty} />}
 

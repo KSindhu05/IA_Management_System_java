@@ -12,4 +12,7 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     List<Announcement> findBySubjectIdIn(List<Long> subjectIds);
 
     List<Announcement> findByFaculty(com.example.ia.entity.User faculty);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByFaculty(com.example.ia.entity.User faculty);
 }
