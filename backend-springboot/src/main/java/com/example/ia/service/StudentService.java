@@ -34,33 +34,63 @@ public class StudentService {
         if (student == null)
             return java.util.List.of();
 
-        java.util.List<com.example.ia.entity.Subject> subjects = subjectRepository
+        // 1. Get all subjects for student's department and semester
+        java.util.List<com.example.ia.entity.Subject> semesterSubjects = subjectRepository
                 .findByDepartmentAndSemester(student.getDepartment(), student.getSemester());
 
-        java.util.Map<String, com.example.ia.payload.response.FacultyResponse> facultyMap = new java.util.HashMap<>();
+        java.util.Set<String> semesterSubjectNames = semesterSubjects.stream()
+                .map(com.example.ia.entity.Subject::getName)
+                .collect(java.util.stream.Collectors.toSet());
 
-        for (com.example.ia.entity.Subject sub : subjects) {
-            String instructorName = sub.getInstructorName();
-            if (instructorName == null || instructorName.isEmpty())
+        // 2. Get all faculty in the department
+        java.util.List<com.example.ia.entity.User> departmentFaculty = userRepository
+                .findByRoleAndDepartment("FACULTY", student.getDepartment());
+
+        java.util.List<com.example.ia.payload.response.FacultyResponse> response = new java.util.ArrayList<>();
+
+        String studentSection = student.getSection() != null ? student.getSection().trim() : "";
+
+        for (com.example.ia.entity.User faculty : departmentFaculty) {
+            // Check section
+            boolean sectionMatch = false;
+            String facSections = faculty.getSection();
+            if (facSections == null || facSections.isBlank()) {
+                sectionMatch = true; // No restriction means see all
+            } else {
+                java.util.List<String> sections = java.util.Arrays.stream(facSections.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(java.util.stream.Collectors.toList());
+                if (sections.contains(studentSection)) {
+                    sectionMatch = true;
+                }
+            }
+
+            if (!sectionMatch)
                 continue;
 
-            facultyMap.computeIfAbsent(instructorName, k -> {
-                com.example.ia.entity.User user = userRepository.findByFullName(k).orElse(null);
-                String email = user != null ? user.getEmail() : "";
-                String dept = user != null ? user.getDepartment() : sub.getDepartment();
-                return new com.example.ia.payload.response.FacultyResponse(k, dept, "", email);
-            });
+            // Check subjects
+            String facSubjectsStr = faculty.getSubjects();
+            if (facSubjectsStr == null || facSubjectsStr.isBlank())
+                continue;
 
-            // Append subject
-            com.example.ia.payload.response.FacultyResponse fac = facultyMap.get(instructorName);
-            if (fac.getSubjects().isEmpty()) {
-                fac.setSubjects(sub.getName());
-            } else {
-                fac.setSubjects(fac.getSubjects() + ", " + sub.getName());
+            java.util.List<String> matchedSubjects = java.util.Arrays.stream(facSubjectsStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .filter(s -> semesterSubjectNames.contains(s))
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (!matchedSubjects.isEmpty()) {
+                String subjectsDisplay = String.join(", ", matchedSubjects);
+                response.add(new com.example.ia.payload.response.FacultyResponse(
+                        faculty.getFullName(),
+                        faculty.getDepartment(),
+                        subjectsDisplay,
+                        faculty.getEmail()));
             }
         }
 
-        return new java.util.ArrayList<>(facultyMap.values());
+        return response;
     }
 
     @Autowired

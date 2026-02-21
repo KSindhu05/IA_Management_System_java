@@ -28,6 +28,8 @@ const FacultyDashboard = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSection, setSelectedSection] = useState('All');
+
 
     // Notification State
     const [notifications, setNotifications] = useState([]);
@@ -83,10 +85,16 @@ const FacultyDashboard = () => {
     const currentFaculty = facultyProfiles.find(f => f.id === user?.id) || facultyData;
 
     // Filter Subjects for this Faculty
+    const facultySections = user?.section ? user.section.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const mySubjects = subjects.length > 0
         ? subjects.map(s => ({
             ...s,
-            studentCount: students.filter(st => String(st.semester) === String(s.semester) && st.department === s.department).length || 0
+            studentCount: students.filter(st =>
+                String(st.semester) === String(s.semester) &&
+                st.department === s.department &&
+                (facultySections.length === 0 || facultySections.includes(st.section))
+            ).length || 0
         }))
         : facultySubjects.filter(sub => sub.instructorId === currentFaculty.id);
 
@@ -1407,7 +1415,14 @@ const FacultyDashboard = () => {
                 // Proceeding with helper usage.
                 // Proceeding with helper usage.
                 const { grade } = getStudentPerformance(s.id);
-                return grade === selectedGradeFilter;
+                // Filter by Grade
+                const gradeMatch = selectedGradeFilter === 'All' || grade === selectedGradeFilter;
+                // Filter by Section
+                const sectionMatch = selectedSection === 'All' || s.section === selectedSection;
+                // Also ensure student is in faculty's assigned sections generally if restricted
+                const facultySectionMatch = facultySections.length === 0 || facultySections.includes(s.section);
+
+                return gradeMatch && sectionMatch && facultySectionMatch;
             })
             .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1434,6 +1449,19 @@ const FacultyDashboard = () => {
                                 <Filter size={16} />
                                 <span>{selectedGradeFilter === 'All' ? 'Filter' : `Grade: ${selectedGradeFilter}`}</span>
                             </button>
+
+                            {/* Section Filter Dropdown */}
+                            {facultySections.length > 1 && (
+                                <select
+                                    className={styles.deptSelect}
+                                    value={selectedSection}
+                                    onChange={(e) => setSelectedSection(e.target.value)}
+                                    style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
+                                >
+                                    <option value="All">All Sections</option>
+                                    {facultySections.map(sec => <option key={sec} value={sec}>Section {sec}</option>)}
+                                </select>
+                            )}
 
                             {showFilterMenu && (
                                 <div className={styles.filterMenu}>
@@ -1587,8 +1615,12 @@ const FacultyDashboard = () => {
 
                                     {/* Dynamic Progress Calculation */}
                                     {(() => {
-                                        // Filter students for this specific subject
-                                        const subjectStudents = students.filter(s => s.department === sub.department && String(s.semester) === String(sub.semester));
+                                        // Filter students for this specific subject AND faculty's sections
+                                        const subjectStudents = students.filter(s =>
+                                            s.department === sub.department &&
+                                            String(s.semester) === String(sub.semester) &&
+                                            (facultySections.length === 0 || facultySections.includes(s.section))
+                                        );
                                         const totalStd = subjectStudents.length;
 
                                         // Count how many have at least one mark entry for this subject
@@ -1686,7 +1718,22 @@ const FacultyDashboard = () => {
                 </div>
 
                 <div className={styles.sectionHeader}>
-                    <div className={styles.headerTitleGroup}></div>
+                    <div className={styles.headerTitleGroup}>
+                        {facultySections.length > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>Section Filter:</span>
+                                <select
+                                    className={styles.deptSelect}
+                                    value={selectedSection}
+                                    onChange={(e) => setSelectedSection(e.target.value)}
+                                    style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
+                                >
+                                    <option value="All">All Sections</option>
+                                    {facultySections.map(sec => <option key={sec} value={sec}>Section {sec}</option>)}
+                                </select>
+                            </div>
+                        )}
+                    </div>
 
                     <div className={styles.headerActions}>
                         <div className={styles.actionButtons}>
@@ -1747,7 +1794,13 @@ const FacultyDashboard = () => {
                             </thead>
                             <tbody>
                                 {students
-                                    .filter(s => selectedSubject && s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester))
+                                    .filter(s => {
+                                        if (!selectedSubject) return false;
+                                        const subjectMatch = s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester);
+                                        const sectionMatch = selectedSection === 'All' || s.section === selectedSection;
+                                        const facultySectionMatch = facultySections.length === 0 || facultySections.includes(s.section);
+                                        return subjectMatch && sectionMatch && facultySectionMatch;
+                                    })
                                     .map((student, index) => {
                                         const sMarks = marks[student.id] || {};
                                         // Mapping logic: local edits override API data
