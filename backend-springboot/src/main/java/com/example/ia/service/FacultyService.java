@@ -68,11 +68,15 @@ public class FacultyService {
 
     public List<Subject> getSubjectsForFaculty(String username) {
         User user = userRepository.findByUsername(username).orElse(null);
-        if (user == null)
+        if (user == null || user.getSubjects() == null || user.getSubjects().isBlank())
             return List.of();
 
-        // Assuming subject instructorName matches user fullName
-        return subjectRepository.findByInstructorName(user.getFullName());
+        List<String> subjectNames = Arrays.stream(user.getSubjects().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+
+        return subjectRepository.findByNameIn(subjectNames);
     }
 
     public FacultyClassAnalytics getAnalytics(String username) {

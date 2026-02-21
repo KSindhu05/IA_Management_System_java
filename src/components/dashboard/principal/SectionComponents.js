@@ -1,6 +1,6 @@
 import React, { memo, useState, useMemo } from 'react';
 
-import { Calendar, Download, Bell, FileText, Search, UserMinus, Briefcase, Clock, Mail, Phone, MapPin, Building, UserCheck, AlertTriangle, X, Trash2, Send, ShieldCheck, RefreshCw, Edit2, Edit3 } from 'lucide-react';
+import { Calendar, Download, Bell, FileText, Search, UserMinus, Briefcase, Clock, Mail, Phone, MapPin, Building, UserCheck, AlertTriangle, X, Trash2, Send, ShieldCheck, RefreshCw, Edit2, Edit3, Eye, EyeOff } from 'lucide-react';
 import { SimpleModal } from './Shared';
 import styles from '../../../pages/PrincipalDashboard.module.css';
 
@@ -493,9 +493,38 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [department, setDepartment] = useState('');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [editingHod, setEditingHod] = useState(null);
+    const [showPassword, setShowPassword] = useState(false);
+
+    // Fixed 5 departments + ability to add more
+    const FIXED_DEPTS = [
+        { id: 'CSE', name: 'Computer Science & Engineering' },
+        { id: 'EEE', name: 'Electrical Electronics & Engineering' },
+        { id: 'MECH', name: 'Mechanical Engineering' },
+        { id: 'CIVIL', name: 'Civil Engineering' },
+        { id: 'MT', name: 'Metallurgy' },
+    ];
+    const [customDepts, setCustomDepts] = useState([]);
+    const [showAddDeptInput, setShowAddDeptInput] = useState(false);
+    const [newDeptId, setNewDeptId] = useState('');
+    const [newDeptName, setNewDeptName] = useState('');
+
+    const allDepts = [...FIXED_DEPTS, ...customDepts];
+
+    const handleAddDept = () => {
+        const id = newDeptId.trim().toUpperCase();
+        const nm = newDeptName.trim();
+        if (!id || !nm) { alert('Please enter both department code and name.'); return; }
+        if (allDepts.some(d => d.id === id)) { alert('Department code already exists.'); return; }
+        setCustomDepts(prev => [...prev, { id, name: nm }]);
+        setNewDeptId('');
+        setNewDeptName('');
+        setShowAddDeptInput(false);
+        setDepartment(id);
+    };
 
     const handleRefresh = async () => {
         if (!onRefresh) return;
@@ -519,6 +548,7 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
         setName('');
         setUsername('');
         setEmail('');
+        setPassword('');
         setDepartment('');
     };
 
@@ -528,18 +558,23 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
             alert('Name and Department are required.');
             return;
         }
+        if (!editingHod && !password) {
+            alert('Password is required.');
+            return;
+        }
 
         if (editingHod) {
-            await onUpdate(editingHod.id, { fullName: name, email, department });
+            await onUpdate(editingHod.id, { fullName: name, username, email, password, department });
             setEditingHod(null);
         } else {
-            await onCreate({ fullName: name, username, email, department });
+            await onCreate({ fullName: name, username, email, password, department });
         }
 
         // Reset form
         setName('');
         setUsername('');
         setEmail('');
+        setPassword('');
         setDepartment('');
     };
 
@@ -611,7 +646,6 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
-                                disabled={!!editingHod}
                             />
                         </div>
                         <div className={styles.formGroup}>
@@ -625,6 +659,31 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
                             />
                         </div>
                         <div className={styles.formGroup}>
+                            <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>{editingHod ? 'Reset Password (Leave blank to keep current)' : 'Password *'}</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    className={styles.inputField}
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder={editingHod ? "New password (optional)" : "Set a strong password"}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required={!editingHod}
+                                    style={{ paddingRight: '2.5rem' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(p => !p)}
+                                    style={{
+                                        position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                                        background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '2px'
+                                    }}
+                                    title={showPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                        </div>
+                        <div className={styles.formGroup}>
                             <label style={{ fontWeight: 600, display: 'block', marginBottom: '0.6rem', color: '#475569', fontSize: '0.9rem' }}>Assigned Department *</label>
                             <select
                                 className={styles.inputField}
@@ -633,17 +692,45 @@ export const ManageHODsSection = memo(({ hods = [], onCreate, user, departments 
                                 required
                             >
                                 <option value="">Select Department</option>
-                                {departments.map(d => (
+                                {allDepts.map(d => (
                                     <option key={d.id} value={d.id}>{d.name} ({d.id})</option>
                                 ))}
                             </select>
+                            {/* + Add New Department */}
+                            {!showAddDeptInput ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddDeptInput(true)}
+                                    style={{ marginTop: '0.6rem', background: 'none', border: 'none', color: '#2563eb', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+                                >
+                                    + Add New Department
+                                </button>
+                            ) : (
+                                <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <input
+                                        placeholder="Code (e.g. EEE)"
+                                        value={newDeptId}
+                                        onChange={e => setNewDeptId(e.target.value)}
+                                        style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', width: '110px' }}
+                                        maxLength={8}
+                                    />
+                                    <input
+                                        placeholder="Full name (e.g. Electrical Engg.)"
+                                        value={newDeptName}
+                                        onChange={e => setNewDeptName(e.target.value)}
+                                        style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', flex: 1, minWidth: '160px' }}
+                                    />
+                                    <button type="button" onClick={handleAddDept} style={{ padding: '0.4rem 0.9rem', borderRadius: '6px', background: '#2563eb', color: 'white', border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>Add</button>
+                                    <button type="button" onClick={() => { setShowAddDeptInput(false); setNewDeptId(''); setNewDeptName(''); }} style={{ padding: '0.4rem 0.9rem', borderRadius: '6px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>Cancel</button>
+                                </div>
+                            )}
                         </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '0.85rem', background: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: '8px' }}>
                             <AlertTriangle size={16} />
-                            <span>{editingHod ? 'ID cannot be changed for security reasons.' : 'Default password is password123'}</span>
+                            <span>{editingHod ? 'Username & password cannot be changed here.' : 'HOD will log in with the password you set above.'}</span>
                         </div>
                         <button type="submit" className={editingHod ? styles.primaryBtn : styles.submitBtn} style={editingHod ? { background: '#f59e0b' } : {}}>
                             {editingHod ? <><RefreshCw size={20} /> Update Information</> : <><UserCheck size={20} /> Register & Grant Access</>}

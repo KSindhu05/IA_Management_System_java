@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import styles from './Login.module.css';
-import { User, Lock, ArrowRight, Moon, Sun } from 'lucide-react';
+import { User, Lock, ArrowRight, Moon, Sun, Eye, EyeOff } from 'lucide-react';
 
 // Import background images
 import bg1 from '../assets/login_background_final.png';
@@ -23,6 +23,7 @@ const Login = () => {
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [typedText, setTypedText] = useState('');
     const [isStarted, setIsStarted] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -238,16 +239,30 @@ const Login = () => {
 
                                 <div className={styles.inputGroup}>
                                     <label htmlFor="password">Password</label>
-                                    <div className={styles.inputWrapper}>
+                                    <div className={styles.inputWrapper} style={{ position: 'relative' }}>
                                         <Lock className={styles.icon} size={20} />
                                         <input
-                                            type="password"
+                                            type={showPassword ? 'text' : 'password'}
                                             id="password"
                                             placeholder="Enter Password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             required
+                                            style={{ paddingRight: '2.5rem' }}
                                         />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(p => !p)}
+                                            style={{
+                                                position: 'absolute', right: '12px', top: '50%',
+                                                transform: 'translateY(-50%)', background: 'none',
+                                                border: 'none', cursor: 'pointer', color: '#94a3b8',
+                                                display: 'flex', alignItems: 'center', padding: 0
+                                            }}
+                                            title={showPassword ? 'Hide password' : 'Show password'}
+                                        >
+                                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                        </button>
                                     </div>
                                 </div>
 

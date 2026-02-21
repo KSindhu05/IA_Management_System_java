@@ -19,4 +19,6 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
     List<Subject> findByInstructorName(String instructorName);
 
     Optional<Subject> findByName(String name);
+
+    List<Subject> findByNameIn(List<String> names);
 }
