@@ -78,6 +78,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const [selectedStudentProfile, setSelectedStudentProfile] = useState(null);
     const [studentMarksProfile, setStudentMarksProfile] = useState([]);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    const [selectedProfileCIE, setSelectedProfileCIE] = useState('CIE1');
 
     // API State
     const [subjects, setSubjects] = useState([]);
@@ -683,6 +684,11 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                     if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
                                     if (!marksMap[m.studentId][sub.id]) marksMap[m.studentId][sub.id] = {};
                                     marksMap[m.studentId][sub.id][m.cieType] = m.marks;
+                                    // Store attendance under _att key
+                                    if (m.attendance != null) {
+                                        if (!marksMap[m.studentId][sub.id]._att) marksMap[m.studentId][sub.id]._att = {};
+                                        marksMap[m.studentId][sub.id]._att[m.cieType] = m.attendance;
+                                    }
                                     totalFound++;
                                 }
                             });
@@ -874,6 +880,41 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         }));
     };
 
+    const handleAttendanceChange = (studentId, subjectId, cieType, value) => {
+        if (value === '') {
+            setEditingMarks(prev => ({
+                ...prev,
+                [studentId]: {
+                    ...prev[studentId],
+                    [subjectId]: {
+                        ...(prev[studentId]?.[subjectId] || {}),
+                        _att: {
+                            ...(prev[studentId]?.[subjectId]?._att || {}),
+                            [cieType]: ''
+                        }
+                    }
+                }
+            }));
+            return;
+        }
+        let numValue = parseFloat(value);
+        if (isNaN(numValue)) return;
+        if (numValue < 0) numValue = 0; if (numValue > 100) numValue = 100;
+        setEditingMarks(prev => ({
+            ...prev,
+            [studentId]: {
+                ...prev[studentId],
+                [subjectId]: {
+                    ...(prev[studentId]?.[subjectId] || {}),
+                    _att: {
+                        ...(prev[studentId]?.[subjectId]?._att || {}),
+                        [cieType]: numValue
+                    }
+                }
+            }
+        }));
+    };
+
     const saveMarks = async () => {
         const payload = [];
         const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub));
@@ -885,15 +926,21 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             Object.keys(studentSubjects).forEach(subjectId => {
                 const subId = Number(subjectId);
                 const cies = studentSubjects[subjectId];
+                const attData = cies._att || {};
 
                 Object.keys(cies).forEach(cieType => {
+                    if (cieType === '_att') return; // Skip attendance sub-object
                     const markValue = cies[cieType];
-                    if (markValue !== undefined && markValue !== null && markValue !== '') {
+                    const attValue = attData[cieType];
+                    const hasMarks = markValue !== undefined && markValue !== null && markValue !== '';
+                    const hasAtt = attValue !== undefined && attValue !== null && attValue !== '';
+                    if (hasMarks || hasAtt) {
                         payload.push({
                             studentId: sid,
                             subjectId: subId,
                             iaType: cieType,
-                            co1: Number(markValue)
+                            co1: hasMarks ? Number(markValue) : null,
+                            attendance: hasAtt ? Number(attValue) : null
                         });
                     }
                 });
@@ -924,6 +971,60 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             console.error(e);
             alert('Error updating marks');
         }
+    };
+
+    const downloadMarksCSV = () => {
+        if (selectedSemester === 'all') {
+            alert('Please select a semester first.');
+            return;
+        }
+        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub))
+            .filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter);
+        const filteredStudents = students.filter(s => String(s.semester) === String(selectedSemester) && s.section === selectedSection);
+
+        if (filteredStudents.length === 0) {
+            alert('No students to download.');
+            return;
+        }
+
+        const cies = selectedInternal === 'All' ? ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'] : [selectedInternal];
+
+        // Build header row
+        let headers = ['Sl.No', 'Reg No', 'Student Name'];
+        semSubjects.forEach(sub => {
+            cies.forEach(cie => headers.push(`${sub.name} - ${cie}`));
+            headers.push(`${sub.name} - Att%`);
+        });
+
+        // Build data rows
+        const rows = filteredStudents.map((student, idx) => {
+            let row = [idx + 1, student.regNo, `"${student.name}"`];
+            semSubjects.forEach(sub => {
+                const subData = editingMarks[student.id]?.[sub.id] || {};
+                const attData = subData._att || {};
+                cies.forEach(cie => row.push(subData[cie] ?? ''));
+                if (selectedInternal === 'All') {
+                    const attVals = Object.values(attData).filter(v => v != null);
+                    const avgAtt = attVals.length > 0 ? Math.round(attVals.reduce((a, b) => a + b, 0) / attVals.length) : '';
+                    row.push(avgAtt !== '' ? `${avgAtt}%` : '');
+                } else {
+                    const att = attData[selectedInternal];
+                    row.push(att != null ? `${Math.round(att)}%` : '');
+                }
+            });
+            return row.join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Marks_Sem${selectedSemester}_${selectedSection}_${selectedInternal === 'All' ? 'AllCIEs' : selectedInternal}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const handleApproveMarks = async (subjectId, iaType) => {
@@ -1541,6 +1642,24 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const renderStudentProfileModal = () => {
         if (!showProfileModal || !selectedStudentProfile) return null;
 
+        // Group marks by subject
+        const subjectMap = {};
+        studentMarksProfile.forEach(mark => {
+            const subId = mark.subject?.id || mark.subjectId;
+            if (!subjectMap[subId]) {
+                subjectMap[subId] = {
+                    name: mark.subject?.name || '-',
+                    code: mark.subject?.code || '',
+                    cies: {}
+                };
+            }
+            subjectMap[subId].cies[mark.cieType] = {
+                marks: mark.marks ?? mark.totalScore ?? null,
+                attendance: mark.attendance ?? null
+            };
+        });
+        const groupedSubjects = Object.values(subjectMap);
+
         return (
             <div className={styles.modalOverlay}>
                 <div className={styles.modalContent} style={{ maxWidth: '800px', width: '90%' }}>
@@ -1559,31 +1678,58 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                         </button>
                     </div>
                     <div className={styles.modalBody}>
-                        <h4 style={{ marginBottom: '1rem', color: '#334155' }}>CIE Marks Overview</h4>
-                        {studentMarksProfile.length > 0 ? (
-                            <table className={styles.table} style={{ border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: 0, color: '#334155' }}>CIE Marks Overview</h4>
+                            <select
+                                value={selectedProfileCIE}
+                                onChange={(e) => setSelectedProfileCIE(e.target.value)}
+                                style={{
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e2e8f0',
+                                    fontSize: '0.9rem',
+                                    fontWeight: 600,
+                                    color: '#2563eb',
+                                    background: '#eff6ff',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="CIE1">CIE-1</option>
+                                <option value="CIE2">CIE-2</option>
+                                <option value="CIE3">CIE-3 (Skill Test-1)</option>
+                                <option value="CIE4">CIE-4 (Skill Test-2)</option>
+                                <option value="CIE5">CIE-5 (Activity)</option>
+                            </select>
+                        </div>
+                        {groupedSubjects.length > 0 ? (
+                            <table className={styles.table} style={{ border: '1px solid #e2e8f0', minWidth: 0, tableLayout: 'auto' }}>
                                 <thead style={{ background: '#f8fafc' }}>
                                     <tr>
                                         <th>Subject</th>
-                                        <th>CIE Type</th>
-                                        <th>Marks Obtained</th>
-                                        <th>Max Marks</th>
-
+                                        <th style={{ textAlign: 'center' }}>Marks (50)</th>
+                                        <th style={{ textAlign: 'center' }}>Attendance</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {studentMarksProfile.map((mark, idx) => (
-                                        <tr key={idx}>
-                                            <td>
-                                                <div style={{ fontWeight: 500 }}>{mark.subjectName}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{mark.subjectCode}</div>
-                                            </td>
-                                            <td><span className={styles.statusBadge} style={{ background: '#e0f2fe', color: '#0369a1' }}>{mark.cieType}</span></td>
-                                            <td style={{ fontWeight: 600 }}>{mark.marks}</td>
-                                            <td style={{ color: '#64748b' }}>{mark.maxMarks}</td>
-
-                                        </tr>
-                                    ))}
+                                    {groupedSubjects.map((sub, idx) => {
+                                        const cieData = sub.cies[selectedProfileCIE];
+                                        const marks = cieData?.marks;
+                                        const att = cieData?.attendance;
+                                        return (
+                                            <tr key={idx}>
+                                                <td>
+                                                    <div style={{ fontWeight: 500 }}>{sub.name}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{sub.code}</div>
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 600, color: marks != null ? (marks >= 25 ? '#16a34a' : marks >= 15 ? '#d97706' : '#dc2626') : '#94a3b8' }}>
+                                                    {marks != null ? marks : '-'}
+                                                </td>
+                                                <td style={{ textAlign: 'center', fontWeight: 600, color: att != null ? (att >= 75 ? '#059669' : att >= 50 ? '#d97706' : '#dc2626') : '#94a3b8' }}>
+                                                    {att != null ? `${Math.round(att)}%` : '-'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         ) : (
@@ -1748,9 +1894,17 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 </div>
                             )}
 
-                            <div className={styles.actionGroup}>
+                            <div className={styles.actionGroup} style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button className={styles.saveBtn} onClick={saveMarks} disabled={selectedSemester === 'all'}>
                                     <Save size={16} /> Save Changes
+                                </button>
+                                <button
+                                    className={styles.saveBtn}
+                                    onClick={downloadMarksCSV}
+                                    disabled={selectedSemester === 'all'}
+                                    style={{ background: 'linear-gradient(135deg, #059669, #10b981)' }}
+                                >
+                                    <Download size={16} /> Download CSV
                                 </button>
                             </div>
                         </div>
@@ -1776,11 +1930,12 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                     <col style={{ width: '50px' }} />
                                     <col style={{ width: '120px' }} />
                                     <col style={{ width: '200px' }} />
-                                    {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => (
-                                        Array.from({ length: selectedInternal === 'All' ? 5 : 1 }).map((_, i) => (
-                                            <col key={`${sub.id}-${i}`} style={selectedInternal === 'All' ? { width: selectedSubjectFilter !== 'all' ? 'auto' : '90px' } : {}} />
-                                        ))
-                                    ))}
+                                    {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => [
+                                        ...Array.from({ length: selectedInternal === 'All' ? 5 : 1 }).map((_, i) => (
+                                            <col key={`${sub.id}-${i}`} style={selectedInternal === 'All' ? { width: selectedSubjectFilter !== 'all' ? 'auto' : '90px' } : { width: '55px' }} />
+                                        )),
+                                        <col key={`${sub.id}-att`} style={{ width: '55px' }} />
+                                    ])}
                                 </colgroup>
                                 <thead>
                                     <tr>
@@ -1803,7 +1958,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                             </div>
                                         </th>
                                         {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => (
-                                            <th key={sub.id} colSpan={selectedInternal === 'All' ? 5 : 1} className={styles.subjectHeader}>
+                                            <th key={sub.id} colSpan={selectedInternal === 'All' ? 6 : 2} className={styles.subjectHeader}>
                                                 <div className={styles.subjectHeaderContent}>
                                                     <BookOpen size={14} className={styles.subjectIcon} />
                                                     <span>{sub.name}</span>
@@ -1822,6 +1977,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                                         <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-3<br />SKILL TEST-1</th>
                                                         <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-4<br />SKILL TEST-2</th>
                                                         <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-5/ACTIVITY</th>
+                                                        <th className={styles.cieSubHeader} style={{ ...singleSubStyle, background: '#ecfdf5', color: '#059669', fontWeight: 600 }}>Att %</th>
                                                     </React.Fragment>
                                                 );
                                             })}
@@ -1829,7 +1985,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                     ) : (
                                         <tr>
                                             <th colSpan={3}></th>
-                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => (
+                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => [
                                                 <th key={sub.id} className={styles.cieSubHeader}>
                                                     {selectedInternal === 'CIE1' ? 'CIE1' :
                                                         selectedInternal === 'CIE2' ? 'CIE2' :
@@ -1837,8 +1993,9 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                                                 selectedInternal === 'CIE4' ? <>CIE-4<br />SKILL TEST-2</> :
                                                                     selectedInternal === 'CIE5' ? 'ACTIVITY' :
                                                                         selectedInternal} (50)
-                                                </th>
-                                            ))}
+                                                </th>,
+                                                <th key={`${sub.id}-att`} className={styles.cieSubHeader} style={{ background: '#ecfdf5', color: '#059669', fontWeight: 600 }}>Att %</th>
+                                            ])}
                                         </tr>
                                     )}
                                 </thead>
@@ -1855,34 +2012,61 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                                         <span>{student.name}</span>
                                                     </div>
                                                 </td>
-                                                {semSubjects.map(sub => (
-                                                    selectedInternal === 'All' ? (
-                                                        <React.Fragment key={sub.id}>
-                                                            {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
-                                                                <td key={cie} style={selectedSubjectFilter !== 'all' ? { textAlign: 'center' } : {}}>
+                                                {semSubjects.map(sub => {
+                                                    const attData = editingMarks[student.id]?.[sub.id]?._att || {};
+                                                    if (selectedInternal === 'All') {
+                                                        // Average attendance across all CIEs that have attendance data
+                                                        const attVals = Object.values(attData).filter(v => v != null);
+                                                        const avgAtt = attVals.length > 0 ? Math.round(attVals.reduce((a, b) => a + b, 0) / attVals.length) : null;
+                                                        return (
+                                                            <React.Fragment key={sub.id}>
+                                                                {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
+                                                                    <td key={cie} style={selectedSubjectFilter !== 'all' ? { textAlign: 'center' } : {}}>
+                                                                        <input
+                                                                            type="number"
+                                                                            className={styles.markInput}
+                                                                            value={editingMarks[student.id]?.[sub.id]?.[cie] ?? ''}
+                                                                            max={50}
+                                                                            style={selectedSubjectFilter !== 'all' ? { width: '60px', padding: '6px', fontSize: '0.9rem', textAlign: 'center' } : { width: '45px', padding: '4px' }}
+                                                                            onChange={(e) => handleMarkChange(student.id, sub.id, cie, e.target.value)}
+                                                                        />
+                                                                    </td>
+                                                                ))}
+                                                                <td style={{ textAlign: 'center' }}>
+                                                                    {avgAtt != null ? (
+                                                                        <span style={{ fontWeight: 600, color: avgAtt >= 75 ? '#059669' : avgAtt >= 50 ? '#d97706' : '#dc2626', fontSize: '0.85rem' }}>{avgAtt}%</span>
+                                                                    ) : '-'}
+                                                                </td>
+                                                            </React.Fragment>
+                                                        );
+                                                    } else {
+                                                        const cieAtt = attData[selectedInternal];
+                                                        return (
+                                                            <React.Fragment key={sub.id}>
+                                                                <td style={{ paddingRight: 0 }}>
                                                                     <input
                                                                         type="number"
                                                                         className={styles.markInput}
-                                                                        value={editingMarks[student.id]?.[sub.id]?.[cie] ?? ''}
+                                                                        value={editingMarks[student.id]?.[sub.id]?.[selectedInternal] ?? ''}
                                                                         max={50}
-                                                                        style={selectedSubjectFilter !== 'all' ? { width: '60px', padding: '6px', fontSize: '0.9rem', textAlign: 'center' } : { width: '45px', padding: '4px' }}
-                                                                        onChange={(e) => handleMarkChange(student.id, sub.id, cie, e.target.value)}
+                                                                        onChange={(e) => handleMarkChange(student.id, sub.id, selectedInternal, e.target.value)}
                                                                     />
                                                                 </td>
-                                                            ))}
-                                                        </React.Fragment>
-                                                    ) : (
-                                                        <td key={sub.id}>
-                                                            <input
-                                                                type="number"
-                                                                className={styles.markInput}
-                                                                value={editingMarks[student.id]?.[sub.id]?.[selectedInternal] ?? ''}
-                                                                max={50}
-                                                                onChange={(e) => handleMarkChange(student.id, sub.id, selectedInternal, e.target.value)}
-                                                            />
-                                                        </td>
-                                                    )
-                                                ))}
+                                                                <td style={{ textAlign: 'center', paddingLeft: 0 }}>
+                                                                    <input
+                                                                        type="number"
+                                                                        className={styles.markInput}
+                                                                        value={cieAtt ?? ''}
+                                                                        min={0}
+                                                                        max={100}
+                                                                        style={{ width: '55px', padding: '4px', textAlign: 'center', color: cieAtt != null && cieAtt !== '' ? (cieAtt >= 75 ? '#059669' : cieAtt >= 50 ? '#d97706' : '#dc2626') : undefined }}
+                                                                        onChange={(e) => handleAttendanceChange(student.id, sub.id, selectedInternal, e.target.value)}
+                                                                    />
+                                                                </td>
+                                                            </React.Fragment>
+                                                        );
+                                                    }
+                                                })}
                                             </tr>
                                         );
                                     }) : (

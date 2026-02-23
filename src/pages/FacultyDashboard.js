@@ -2968,7 +2968,7 @@ const FacultyDashboard = () => {
                                 style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.95rem' }}
                             >
                                 <option value="">-- Select Department --</option>
-                                {allDepartments.filter(d => d !== user?.department).map(d => (
+                                {allDepartments.map(d => (
                                     <option key={d} value={d}>{d}</option>
                                 ))}
                             </select>
