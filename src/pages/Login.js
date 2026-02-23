@@ -31,7 +31,7 @@ const Login = () => {
 
     // Typewriter Content
     const typeWriterStrings = [
-        "IA Management System for Diploma Education",
+        "CIA Management System for Diploma Education",
         "Track Internal Assessment Marks",
         "Monitor Academic Performance",
         "Role-Based Access for Students and Faculty"
@@ -180,7 +180,7 @@ const Login = () => {
             {/* Team Member Ticker */}
             <div className={styles.tickerContainer}>
                 <div className={styles.tickerContent}>
-                    This project IA MANAGEMENT SYSTEM has been done by K Sindhu, M Priyanka, V Akshaya, Amrutha, Gouthami, Chandana, Arshiya, Tasmiya
+                    This project CIA MANAGEMENT SYSTEM has been done by K Sindhu, M Priyanka, V Akshaya, Amrutha, Gouthami, Chandana, Arshiya, Tasmiya
                 </div>
             </div>
 
@@ -189,7 +189,7 @@ const Login = () => {
                 {/* Left Side - Image Illustration */}
                 <div className={styles.leftContent}>
                     <div className={styles.systemTitle}>
-                        <span className={styles.iaText}>IA</span>
+                        <span className={styles.iaText}>CIA</span>
                         <span className={styles.managementText}>MANAGEMENT SYSTEM</span>
                     </div>
 
@@ -298,7 +298,7 @@ const Login = () => {
                                     🔒 Secure Role-Based Authentication
                                 </div>
                                 <div className={styles.copyRight}>
-                                    © 2026 Sanjay Gandhi Polytechnic | IA Management System
+                                    © 2026 Sanjay Gandhi Polytechnic | CIA Management System
                                 </div>
                             </div>
                         </div>

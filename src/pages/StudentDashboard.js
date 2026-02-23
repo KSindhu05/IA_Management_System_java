@@ -47,12 +47,13 @@ const StudentDashboard = () => {
                     const data = await response.json();
                     setRealMarks(data);
 
-                    const totalMarks = data.reduce((sum, m) => sum + (m.totalScore || 0), 0);
-                    const totalMaxMarks = data.reduce((sum, m) => sum + (m.subject?.maxMarks || 50), 0);
+                    // Only count records that have actual marks (non-null, non-zero)
+                    const recordsWithMarks = data.filter(m => m.totalScore != null && m.totalScore > 0);
+                    const totalMarks = recordsWithMarks.reduce((sum, m) => sum + (m.totalScore || 0), 0);
+                    const totalMaxMarks = recordsWithMarks.reduce((sum, m) => sum + (m.subject?.maxMarks || 50), 0);
                     let avgScore25 = totalMaxMarks > 0 ? Math.round((totalMarks / totalMaxMarks) * 25) : 0;
 
                     // Dynamic Calculation of Aggregate Percentage
-                    // Assuming totalMaxMarks is the sum of max marks for all subjects (e.g. 50 * numSubjects)
                     const aggregatePercentage = totalMaxMarks > 0 ? ((totalMarks / totalMaxMarks) * 100).toFixed(1) : 0;
 
 
@@ -97,7 +98,8 @@ const StudentDashboard = () => {
                             console.error("Failed to fetch student profile", profileErr);
                         }
                     }
-                    const uniqueCIEs = new Set(data.map(m => m.cieType));
+                    // Only count CIE types that have actual marks (not null/zero)
+                    const uniqueCIEs = new Set(data.filter(m => m.totalScore != null && m.totalScore > 0).map(m => m.cieType));
                     setCieStatus(`${uniqueCIEs.size}/5`);
 
                     const groupedMarks = {};

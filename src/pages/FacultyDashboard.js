@@ -17,6 +17,14 @@ const calculateGradeFromPercentage = (percentage) => {
     return 'F';
 };
 
+// Helper to identify Indian Constitution subject (should be excluded from marks views)
+const isICSubject = (sub) => {
+    if (!sub) return false;
+    const name = (sub.name || '').toUpperCase().trim();
+    // Only match the full "Indian Constitution" name, not just the 2-letter abbreviation
+    return name === 'INDIAN CONSTITUTION';
+};
+
 const FacultyDashboard = () => {
     const { user } = useAuth();
     const [activeSection, setActiveSection] = useState('Overview');
@@ -29,6 +37,7 @@ const FacultyDashboard = () => {
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedSection, setSelectedSection] = useState('All');
+    const [selectedDept, setSelectedDept] = useState(() => localStorage.getItem(`faculty_dept_filter_${user?.id}`) || 'All');
 
 
     // Notification State
@@ -97,7 +106,7 @@ const FacultyDashboard = () => {
     // Filter Subjects for this Faculty
     const facultySections = user?.section ? user.section.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-    const mySubjects = subjects.length > 0
+    const mySubjectsBase = subjects.length > 0
         ? subjects.map(s => ({
             ...s,
             studentCount: students.filter(st =>
@@ -107,6 +116,18 @@ const FacultyDashboard = () => {
             ).length || 0
         }))
         : facultySubjects.filter(sub => sub.instructorId === currentFaculty.id);
+
+    const uniqueDepartments = ['All', ...new Set(mySubjectsBase.map(s => s.department).filter(Boolean))];
+
+    const mySubjects = selectedDept === 'All'
+        ? mySubjectsBase
+        : mySubjectsBase.filter(s => s.department === selectedDept);
+
+    const handleDeptFilterChange = (dept) => {
+        setSelectedDept(dept);
+        localStorage.setItem(`faculty_dept_filter_${user?.id}`, dept);
+        showToast(`Filtering by ${dept} department`, 'info');
+    };
 
     // Derived Mentees
     const myMentees = students.filter(s => menteeIds.includes(s.id)).map(s => {
@@ -296,7 +317,8 @@ const FacultyDashboard = () => {
                 // Let's assume we can fetch marks for each subject.
                 const subRes = await fetch(`${API_BASE_URL}/faculty/my-subjects`, { headers });
                 if (subRes.ok) {
-                    const subs = await subRes.json();
+                    const allSubs = await subRes.json();
+                    const subs = allSubs.filter(s => !isICSubject(s));
                     const marksMap = {};
 
                     await Promise.all(subs.map(async (sub) => {
@@ -598,7 +620,12 @@ const FacultyDashboard = () => {
             path: '/dashboard/faculty',
             icon: <LayoutDashboard size={20} />,
             isActive: activeSection === 'Overview',
-            onClick: () => { setActiveSection('Overview'); setSelectedSubject(null); }
+            onClick: () => {
+                setActiveSection('Overview');
+                setSelectedSubject(null);
+                setSelectedDept('All');
+                localStorage.setItem(`faculty_dept_filter_${user?.id}`, 'All');
+            }
         },
         {
             label: 'My Students',
@@ -612,7 +639,12 @@ const FacultyDashboard = () => {
             path: '/dashboard/faculty',
             icon: <FilePlus size={20} />,
             isActive: activeSection === 'CIE Entry',
-            onClick: () => { setActiveSection('CIE Entry'); setSelectedSubject(null); }
+            onClick: () => {
+                setActiveSection('CIE Entry');
+                setSelectedSubject(null);
+                setSelectedDept('All');
+                localStorage.setItem(`faculty_dept_filter_${user?.id}`, 'All');
+            }
         },
         {
             label: 'CIE Schedule',
@@ -677,7 +709,7 @@ const FacultyDashboard = () => {
 
                 // Initialize empty for all current students
                 students.forEach(s => {
-                    newMarks[s.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
+                    newMarks[s.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', att1: '', att2: '', att3: '', att4: '', att5: '' };
                 });
 
                 // Track per-CIE statuses to determine lock state
@@ -697,7 +729,7 @@ const FacultyDashboard = () => {
                         // CRITICAL FIX: Ignore marks for students not in the current list (phantom marks)
                         if (!validStudentIds.has(sId)) return;
 
-                        if (!newMarks[sId]) newMarks[sId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '' };
+                        if (!newMarks[sId]) newMarks[sId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', att1: '', att2: '', att3: '', att4: '', att5: '' };
 
                         // Normalize key: CIE-1 -> cie1, CIE1 -> cie1
                         const rawType = m.cieType || m.iaType;
@@ -710,6 +742,12 @@ const FacultyDashboard = () => {
                             const isPending = m.status === 'PENDING' || !m.status;
                             const markVal = (isNotEntered && isPending) ? '' : (m.marks !== null && m.marks !== undefined ? m.marks : '');
                             newMarks[sId][key] = markVal;
+
+                            // Parse attendance: att1 for cie1, att2 for cie2, etc.
+                            const attKey = 'att' + key.replace('cie', '');
+                            if (m.attendance !== null && m.attendance !== undefined) {
+                                newMarks[sId][attKey] = m.attendance;
+                            }
                         }
 
                         // Track status per CIE type
@@ -739,11 +777,8 @@ const FacultyDashboard = () => {
         let numValue = parseInt(value, 10);
         if (value === '' || value === 'Ab') numValue = value; // Allow empty or Ab
 
-        // All CIEs have max 50 marks
-        let max = 50;
-
         if (typeof numValue === 'number' && numValue < 0) numValue = 0;
-        if (typeof numValue === 'number' && numValue > max) numValue = max;
+        if (typeof numValue === 'number' && numValue > 50) numValue = 50;
 
         // Update Local State (for UI)
         setMarks(prev => ({
@@ -759,7 +794,7 @@ const FacultyDashboard = () => {
             setAllStudentMarks(prev => ({
                 ...prev,
                 [selectedSubject.id]: {
-                    ...prev[selectedSubject.id]?.[studentId],
+                    ...prev[selectedSubject.id],
                     [studentId]: {
                         ...prev[selectedSubject.id]?.[studentId],
                         [field]: numValue
@@ -769,38 +804,68 @@ const FacultyDashboard = () => {
         }
     };
 
+    const handleAttendanceChange = (studentId, field, value) => {
+        let numValue = parseFloat(value);
+        if (value === '') numValue = '';
+        if (typeof numValue === 'number' && !isNaN(numValue)) {
+            if (numValue < 0) numValue = 0;
+            if (numValue > 100) numValue = 100;
+        }
+        setMarks(prev => ({
+            ...prev,
+            [studentId]: {
+                ...prev[studentId],
+                [field]: numValue
+            }
+        }));
+    };
+
     const getLowPerformers = () => {
         let lowList = [];
         // Iterate over all subjects in allStudentMarks
         Object.keys(allStudentMarks).forEach(subId => {
-            const subject = facultySubjects.find(s => s.id === parseInt(subId));
+            // Find subject details from the subjects list (synced with API)
+            const subject = subjects.find(s => s.id === parseInt(subId));
             if (!subject) return;
+            if (isICSubject(subject)) {
+                alert(`${subject.name} is a non-cie subject. Marks entry is not required.`);
+                return;
+            }
 
             const studentsMarks = allStudentMarks[subId];
             Object.keys(studentsMarks).forEach(stdId => {
+                const sId = parseInt(stdId);
                 const m = studentsMarks[stdId];
-                // Check ANY IA < 15
-                const s1 = m.cie1 === 'Ab' ? 0 : (parseInt(m.cie1) || 0);
-                const s2 = m.cie2 === 'Ab' ? 0 : (parseInt(m.cie2) || 0);
 
-                // Find lowest score
-                const minScore = Math.min(s1, s2);
+                // Find student details
+                const student = students.find(s => s.id === sId);
+                if (!student) return;
 
-                if (minScore < 15) { // Threshold 15/30
-                    const student = studentsList.find(s => s.id === stdId);
-                    if (student) {
+                ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(cieKey => {
+                    const scoreVal = m[cieKey];
+                    // Skip if empty/pending
+                    if (scoreVal === '' || scoreVal === null || scoreVal === undefined) return;
+
+                    const score = scoreVal === 'Ab' ? 0 : parseFloat(scoreVal);
+                    if (!isNaN(score) && score < 20) {
                         lowList.push({
+                            id: stdId,
+                            regNo: student.regNo || student.rollNo || 'N/A',
                             name: student.name,
                             subject: subject.name,
-                            score: minScore
+                            cieType: cieKey.toUpperCase(),
+                            score: score
                         });
                     }
-                }
+                });
             });
         });
 
-        // Sort by lowest score and take top 5
-        return lowList.sort((a, b) => (a.score === 'Ab' ? 0 : a.score) - (b.score === 'Ab' ? 0 : b.score)).slice(0, 5);
+        // Filter by UI dropdowns
+        return lowList
+            .filter(item => filterSubject === 'All' || item.subject === filterSubject)
+            .filter(item => filterCIE === 'All' || item.cieType === filterCIE)
+            .sort((a, b) => a.score - b.score);
     };
 
     const calculateAverage = (student) => {
@@ -826,16 +891,22 @@ const FacultyDashboard = () => {
                 if (cieLockStatus[key]) return;
 
                 const val = sMarks[key];
+                const attKey = 'att' + key.replace('cie', '');
+                const attVal = sMarks[attKey];
+                const attendanceNum = (attVal !== '' && attVal !== null && attVal !== undefined) ? parseFloat(attVal) : null;
 
-                // If the field was cleared (empty string), send null to clear it in backend
+                // If marks field is empty and no attendance, skip entirely — don't create empty records
                 if (val === '' || val === null || val === undefined) {
-                    payload.push({
-                        studentId: parseInt(studentId),
-                        subjectId: selectedSubject.id,
-                        iaType: key.toUpperCase(),
-                        co1: null,
-                        co2: 0
-                    });
+                    // Only send if there's attendance data to save
+                    if (attendanceNum != null) {
+                        payload.push({
+                            studentId: parseInt(studentId),
+                            subjectId: selectedSubject.id,
+                            iaType: key.toUpperCase(),
+                            co1: null,
+                            attendance: attendanceNum
+                        });
+                    }
                     return;
                 }
 
@@ -850,7 +921,7 @@ const FacultyDashboard = () => {
                     subjectId: selectedSubject.id,
                     iaType: key.toUpperCase(),
                     co1: score,
-                    co2: 0
+                    attendance: attendanceNum
                 });
             });
         });
@@ -876,6 +947,7 @@ const FacultyDashboard = () => {
             return { success: false, message: e.message };
         }
     };
+
 
     const handleSave = async () => {
         setSaving(true);
@@ -1288,12 +1360,34 @@ const FacultyDashboard = () => {
             < div className={styles.mainContentGrid} >
                 <div className={styles.leftColumn}>
                     <section>
-                        <h2 className={styles.sectionTitle}>My Subjects</h2>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h2 className={styles.sectionTitle} style={{ margin: 0 }}>My Subjects</h2>
+                            {uniqueDepartments.length > 2 && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>Filter Dept:</span>
+                                    <select
+                                        className={styles.deptSelect}
+                                        value={selectedDept}
+                                        onChange={(e) => handleDeptFilterChange(e.target.value)}
+                                        style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
+                                    >
+                                        {uniqueDepartments.map(dept => (
+                                            <option key={dept} value={dept}>{dept === 'All' ? 'All Departments' : dept}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
                         <div className={styles.cardsGrid}>
                             {mySubjects.length > 0 ? mySubjects.map(sub => (
                                 <div key={sub.id} className={styles.subjectCard} onClick={() => handleSubjectClick(sub)}>
                                     <div className={styles.cardHeader}>
-                                        <h3 className={styles.subjectName}>{sub.name}</h3>
+                                        <div>
+                                            <h3 className={styles.subjectName}>{sub.name}</h3>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                                {sub.department}
+                                            </span>
+                                        </div>
                                         <span className={styles.termBadge}>{sub.semester} Sem</span>
                                     </div>
                                     <div className={styles.subjectFooter}>
@@ -1360,6 +1454,9 @@ const FacultyDashboard = () => {
         let totalPerformance = 0;
         let subjectCount = 0;
         Object.keys(allStudentMarks).forEach(subId => {
+            const subject = subjects.find(s => s.id === parseInt(subId));
+            if (isICSubject(subject)) return;
+
             const sMarks = allStudentMarks[subId][std.id];
             if (sMarks) {
                 const scores = [sMarks.cie1, sMarks.cie2, sMarks.cie3, sMarks.cie4, sMarks.cie5].filter(x => x !== '' && x !== 'Ab' && x !== undefined).map(Number);
@@ -1608,15 +1705,76 @@ const FacultyDashboard = () => {
 
     const renderCIEEntry = () => {
         if (!selectedSubject) {
+            // New logic: If multiple departments exist and 'All' is selected, show dept cards
+            if (uniqueDepartments.length > 2 && selectedDept === 'All') {
+                return (
+                    <div className={styles.sectionContainer} style={{ minHeight: '600px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                            <h2 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#1e293b', marginBottom: '0.5rem', letterSpacing: '-1px' }}>Select Department</h2>
+                            <p style={{ color: '#64748b', fontSize: '1.2rem', fontWeight: '500' }}>Choose a department to manage CIE marks and schedules</p>
+                        </div>
+                        <div className={styles.deptSelectionGrid}>
+                            {uniqueDepartments.filter(d => d !== 'All').map(dept => (
+                                <div key={dept} className={styles.deptCard} onClick={() => handleDeptFilterChange(dept)}>
+                                    <div className={styles.deptIconContainer}>
+                                        <Building2 size={42} />
+                                    </div>
+                                    <h3 className={styles.deptName}>{dept}</h3>
+                                    <span className={styles.deptSubtext}>View Schedules</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div >
+                );
+            }
+
             return (
                 <div className={styles.emptyState}>
-
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <h2 className={styles.sectionTitle} style={{ margin: 0 }}>Select a Subject to Enter Marks</h2>
+                            {selectedDept !== 'All' && uniqueDepartments.length > 2 && (
+                                <span style={{ backgroundColor: '#2563eb', color: 'white', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                    {selectedDept} Dept
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            {uniqueDepartments.length > 2 && (
+                                <button
+                                    onClick={() => handleDeptFilterChange('All')}
+                                    className={styles.backLink}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: '#f1f5f9',
+                                        color: '#475569',
+                                        padding: '0.4rem 1rem',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '0.85rem',
+                                        transition: 'all 0.2s ease',
+                                        border: '1px solid #e2e8f0'
+                                    }}
+                                >
+                                    ← Back to Departments
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
                     <div className={styles.cardsGrid}>
                         {mySubjects.map(sub => (
                             <div key={sub.id} className={styles.subjectCard} onClick={() => handleSubjectClick(sub)}>
                                 <div className={styles.cardHeader}>
-                                    <h3 className={styles.subjectName}>{sub.name}</h3>
+                                    <div>
+                                        <h3 className={styles.subjectName}>{sub.name}</h3>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                            {sub.department}
+                                        </span>
+                                    </div>
                                     <span className={styles.termBadge} style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}>{sub.semester} Sem</span>
                                 </div>
 
@@ -1724,6 +1882,8 @@ const FacultyDashboard = () => {
                                 <div className={styles.subjectMeta}>
                                     <span>{selectedSubject.code}</span>
                                     <span>|</span>
+                                    <span>{selectedSubject.department}</span>
+                                    <span>|</span>
                                     <span>{selectedSubject.semester} Sem</span>
                                 </div>
                             </div>
@@ -1793,103 +1953,174 @@ const FacultyDashboard = () => {
                 </div>
 
                 <div className={styles.card}>
-                    <div className={styles.tableContainer}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th>Sl No</th>
-                                    <th>Reg No</th>
-                                    <th>Student Name</th>
-                                    <th>CIE-1 (50)</th>
-                                    <th>CIE-2 (50)</th>
-                                    <th>CIE-3 (50)</th>
-                                    <th>CIE-4 (50)</th>
-                                    <th>CIE-5 (50)</th>
+                    <div className={styles.tableWrapper} style={{ overflowX: 'auto' }}>
+                        <div className={styles.tableContainer} style={{ overflowX: 'auto' }}>
+                            <table className={styles.table} style={{ minWidth: '1500px' }}>
+                                <thead>
+                                    <tr>
+                                        <th rowSpan={2} style={{ verticalAlign: 'middle' }}>Sl No</th>
+                                        <th rowSpan={2} style={{ verticalAlign: 'middle' }}>Reg No</th>
+                                        <th rowSpan={2} style={{ verticalAlign: 'middle' }}>Student Name</th>
+                                        <th colSpan={2} style={{ textAlign: 'center', background: '#eff6ff', borderBottom: '2px solid #3b82f6' }}>CIE-1</th>
+                                        <th colSpan={2} style={{ textAlign: 'center', background: '#f0fdf4', borderBottom: '2px solid #22c55e' }}>CIE-2</th>
+                                        <th colSpan={2} style={{ textAlign: 'center', background: '#fefce8', borderBottom: '2px solid #eab308' }}>CIE-3</th>
+                                        <th colSpan={2} style={{ textAlign: 'center', background: '#fef2f2', borderBottom: '2px solid #ef4444' }}>CIE-4</th>
+                                        <th colSpan={2} style={{ textAlign: 'center', background: '#f5f3ff', borderBottom: '2px solid #8b5cf6' }}>CIE-5</th>
+                                        <th rowSpan={2} style={{ verticalAlign: 'middle' }}>Total</th>
+                                        <th rowSpan={2} style={{ verticalAlign: 'middle', minWidth: '120px', maxWidth: '200px' }}>Remarks</th>
+                                    </tr>
+                                    <tr>
+                                        <th style={{ fontSize: '0.75rem', background: '#eff6ff' }}>Marks</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#eff6ff' }}>Att%</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#f0fdf4' }}>Marks</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#f0fdf4' }}>Att%</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#fefce8' }}>Marks</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#fefce8' }}>Att%</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#fef2f2' }}>Marks</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#fef2f2' }}>Att%</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#f5f3ff' }}>Marks</th>
+                                        <th style={{ fontSize: '0.75rem', background: '#f5f3ff' }}>Att%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {students
+                                        .filter(s => {
+                                            if (!selectedSubject) return false;
+                                            const subjectMatch = s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester);
+                                            const sectionMatch = selectedSection === 'All' || s.section === selectedSection;
+                                            const facultySectionMatch = facultySections.length === 0 || facultySections.includes(s.section);
+                                            return subjectMatch && sectionMatch && facultySectionMatch;
+                                        })
+                                        .map((student, index) => {
+                                            const sMarks = marks[student.id] || {};
+                                            const ia1Mark = sMarks['CIE1'] || {};
 
-                                    <th>Total (250)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {students
-                                    .filter(s => {
-                                        if (!selectedSubject) return false;
-                                        const subjectMatch = s.department === selectedSubject.department && String(s.semester) === String(selectedSubject.semester);
-                                        const sectionMatch = selectedSection === 'All' || s.section === selectedSection;
-                                        const facultySectionMatch = facultySections.length === 0 || facultySections.includes(s.section);
-                                        return subjectMatch && sectionMatch && facultySectionMatch;
-                                    })
-                                    .map((student, index) => {
-                                        const sMarks = marks[student.id] || {};
-                                        // Mapping logic: local edits override API data
-                                        const ia1Mark = sMarks['CIE1'] || {};
+                                            const valCIE1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '');
+                                            const valCIE2 = sMarks.cie2 !== undefined ? sMarks.cie2 : '';
+                                            const valCIE3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '';
+                                            const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
+                                            const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
 
-                                        // Check if we have a direct edit (top-level key) or fallback to API object
-                                        const valCIE1 = sMarks.cie1 !== undefined ? sMarks.cie1 : (ia1Mark.cie1Score != null ? ia1Mark.cie1Score : '');
-                                        const valCIE2 = sMarks.cie2 !== undefined ? sMarks.cie2 : (ia1Mark.cie2Score != null ? ia1Mark.cie2Score : '');
-                                        const valCIE3 = sMarks.cie3 !== undefined ? sMarks.cie3 : '';
-                                        const valCIE4 = sMarks.cie4 !== undefined ? sMarks.cie4 : '';
-                                        const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
+                                            const valAtt1 = sMarks.att1 !== undefined ? sMarks.att1 : '';
+                                            const valAtt2 = sMarks.att2 !== undefined ? sMarks.att2 : '';
+                                            const valAtt3 = sMarks.att3 !== undefined ? sMarks.att3 : '';
+                                            const valAtt4 = sMarks.att4 !== undefined ? sMarks.att4 : '';
+                                            const valAtt5 = sMarks.att5 !== undefined ? sMarks.att5 : '';
 
+                                            // Remarks/warning logic
+                                            const cieValues = [
+                                                { marks: valCIE1, att: valAtt1, label: 'CIE-1' },
+                                                { marks: valCIE2, att: valAtt2, label: 'CIE-2' },
+                                                { marks: valCIE3, att: valAtt3, label: 'CIE-3' },
+                                                { marks: valCIE4, att: valAtt4, label: 'CIE-4' },
+                                                { marks: valCIE5, att: valAtt5, label: 'CIE-5' },
+                                            ];
 
+                                            const lowAttCIEs = cieValues.filter(c => c.att !== '' && c.att !== null && c.att !== undefined && Number(c.att) < 75);
+                                            const lowMarkCIEs = cieValues.filter(c => c.marks !== '' && c.marks !== null && c.marks !== undefined && c.marks !== 'Ab' && Number(c.marks) < 20);
+                                            const hasLowAtt = lowAttCIEs.length > 0;
+                                            const hasLowMarks = lowMarkCIEs.length > 0;
+                                            const hasAnyData = cieValues.some(c => (c.marks !== '' && c.marks !== null && c.marks !== undefined) || (c.att !== '' && c.att !== null && c.att !== undefined));
 
-                                        return (
-                                            <tr key={student.id}>
-                                                <td>{index + 1}</td>
-                                                <td>{student.rollNo || student.regNo}</td>
-                                                <td>{student.name}</td>
-                                                <td>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.markInput}
-                                                        value={valCIE1}
-                                                        onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
-                                                        placeholder=""
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.markInput}
-                                                        value={valCIE2}
-                                                        onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
-                                                        placeholder=""
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.markInput}
-                                                        value={valCIE3}
-                                                        onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
-                                                        placeholder=""
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.markInput}
-                                                        value={valCIE4}
-                                                        onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
-                                                        placeholder=""
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.markInput}
-                                                        value={valCIE5}
-                                                        onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
-                                                        placeholder=""
-                                                    />
-                                                </td>
+                                            let remarkBadge = null;
+                                            if (hasLowAtt && hasLowMarks) {
+                                                remarkBadge = (
+                                                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '180px', lineHeight: '1.4' }}>
+                                                        ⚠ At Risk
+                                                    </span>
+                                                );
+                                            } else if (hasLowAtt) {
+                                                remarkBadge = (
+                                                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '180px', lineHeight: '1.4' }}>
+                                                        🔴 Low Att. {lowAttCIEs.map(c => c.label).join(', ')}
+                                                    </span>
+                                                );
+                                            } else if (hasLowMarks) {
+                                                remarkBadge = (
+                                                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, background: '#fefce8', color: '#ca8a04', border: '1px solid #fde68a', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '180px', lineHeight: '1.4' }}>
+                                                        🟡 Low {lowMarkCIEs.map(c => c.label).join(', ')}
+                                                    </span>
+                                                );
+                                            } else if (hasAnyData) {
+                                                remarkBadge = (
+                                                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 600, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }}>
+                                                        🟢 Good
+                                                    </span>
+                                                );
+                                            }
 
-                                                {/* Final Total */}
-                                                <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
-                                            </tr>
-                                        )
-                                    })}
-                            </tbody>
-                        </table>
+                                            const attInputStyle = { width: '52px', padding: '4px 3px', border: '1px solid #d1d5db', borderRadius: '6px', textAlign: 'center', fontSize: '0.82rem', background: '#f9fafb' };
+
+                                            return (
+                                                <tr key={student.id}>
+                                                    <td>{index + 1}</td>
+                                                    <td>{student.rollNo || student.regNo}</td>
+                                                    <td>{student.name}</td>
+                                                    {/* CIE-1 */}
+                                                    <td>
+                                                        <input type="number" className={styles.markInput} value={valCIE1}
+                                                            onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
+                                                            placeholder="M" title="CIE-1 Marks" />
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" style={attInputStyle} value={valAtt1}
+                                                            onChange={(e) => handleAttendanceChange(student.id, 'att1', e.target.value)}
+                                                            placeholder="%" title="CIE-1 Attendance %" min="0" max="100" />
+                                                    </td>
+                                                    {/* CIE-2 */}
+                                                    <td>
+                                                        <input type="number" className={styles.markInput} value={valCIE2}
+                                                            onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
+                                                            placeholder="M" title="CIE-2 Marks" />
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" style={attInputStyle} value={valAtt2}
+                                                            onChange={(e) => handleAttendanceChange(student.id, 'att2', e.target.value)}
+                                                            placeholder="%" title="CIE-2 Attendance %" min="0" max="100" />
+                                                    </td>
+                                                    {/* CIE-3 */}
+                                                    <td>
+                                                        <input type="number" className={styles.markInput} value={valCIE3}
+                                                            onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
+                                                            placeholder="M" title="CIE-3 Marks" />
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" style={attInputStyle} value={valAtt3}
+                                                            onChange={(e) => handleAttendanceChange(student.id, 'att3', e.target.value)}
+                                                            placeholder="%" title="CIE-3 Attendance %" min="0" max="100" />
+                                                    </td>
+                                                    {/* CIE-4 */}
+                                                    <td>
+                                                        <input type="number" className={styles.markInput} value={valCIE4}
+                                                            onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
+                                                            placeholder="M" title="CIE-4 Marks" />
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" style={attInputStyle} value={valAtt4}
+                                                            onChange={(e) => handleAttendanceChange(student.id, 'att4', e.target.value)}
+                                                            placeholder="%" title="CIE-4 Attendance %" min="0" max="100" />
+                                                    </td>
+                                                    {/* CIE-5 */}
+                                                    <td>
+                                                        <input type="number" className={styles.markInput} value={valCIE5}
+                                                            onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
+                                                            placeholder="M" title="CIE-5 Marks" />
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" style={attInputStyle} value={valAtt5}
+                                                            onChange={(e) => handleAttendanceChange(student.id, 'att5', e.target.value)}
+                                                            placeholder="%" title="CIE-5 Attendance %" min="0" max="100" />
+                                                    </td>
+                                                    {/* Total */}
+                                                    <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
+                                                    {/* Remarks */}
+                                                    <td style={{ maxWidth: '200px', whiteSpace: 'normal' }}>{remarkBadge}</td>
+                                                </tr>
+                                            )
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2079,8 +2310,13 @@ const FacultyDashboard = () => {
                             <div key={sub.id} className={styles.card} style={{ padding: '1.5rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                                     <div>
-                                        <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>{sub.name}</h3>
-                                        <span className={styles.termBadge} style={{ fontSize: '0.75rem' }}>{sub.semester} Sem</span>
+                                        <h3 style={{ margin: '0 0 0.25rem', fontSize: '1.1rem' }}>{sub.name}</h3>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', display: 'inline-block', marginBottom: '0.5rem' }}>
+                                            {sub.department}
+                                        </div>
+                                        <div style={{ display: 'block' }}>
+                                            <span className={styles.termBadge} style={{ fontSize: '0.75rem' }}>{sub.semester} Sem</span>
+                                        </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: percent === 100 ? '#10b981' : '#3b82f6' }}>{percent}%</span>
@@ -2254,7 +2490,7 @@ const FacultyDashboard = () => {
                                             style={{ width: '100%' }}
                                         >
                                             <option value="">Select Subject</option>
-                                            {mySubjects.map(sub => (
+                                            {mySubjects.filter(sub => !isICSubject(sub)).map(sub => (
                                                 <option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>
                                             ))}
                                         </select>
@@ -2501,15 +2737,11 @@ const FacultyDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {facultyClassAnalytics.lowPerformersList && facultyClassAnalytics.lowPerformersList
-                                    .filter(item => filterSubject === 'All' || item.subject === filterSubject)
-                                    .filter(item => filterCIE === 'All' || item.cieType === filterCIE)
-                                    .length > 0 ? (
-                                    facultyClassAnalytics.lowPerformersList
-                                        .filter(item => filterSubject === 'All' || item.subject === filterSubject)
-                                        .filter(item => filterCIE === 'All' || item.cieType === filterCIE)
-                                        .map((item, i) => (
-                                            <tr key={i}>
+                                {(() => {
+                                    const filteredList = getLowPerformers();
+                                    if (filteredList.length > 0) {
+                                        return filteredList.map((item, i) => (
+                                            <tr key={`${item.id}-${item.subject}-${item.cieType}`}>
                                                 <td style={{ color: '#64748b' }}>{i + 1}</td>
                                                 <td className={styles.codeText}>{item.regNo}</td>
                                                 <td>
@@ -2528,17 +2760,20 @@ const FacultyDashboard = () => {
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                                <CheckCircle size={32} color="#10b981" />
-                                                <p>No low performers found matching filters!</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
+                                        ));
+                                    } else {
+                                        return (
+                                            <tr>
+                                                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                                        <CheckCircle size={32} color="#10b981" />
+                                                        <p>No low performers found matching filters!</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
+                                })()}
                             </tbody>
                         </table>
                     </div>

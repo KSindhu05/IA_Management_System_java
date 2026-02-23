@@ -5,7 +5,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import {
     LayoutDashboard, Users, FileText, CheckCircle, TrendingUp, BarChart2,
     AlertTriangle, Briefcase, Bell, Activity, Clock, Award,
-    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus, Upload, GitPullRequest
+    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus, Upload, GitPullRequest, User, Hash, Fingerprint
 } from 'lucide-react';
 import {
     departments, subjectsByDept, getStudentsByDept, englishMarks, mathsMarks,
@@ -28,6 +28,13 @@ ChartJS.register(
 const hodTrendData = { labels: ['2022', '2023', '2024'], datasets: [{ label: 'Pass %', data: [75, 80, 85], borderColor: '#3b82f6', fill: false }] };
 // atRiskStudents is now a state, see useState below
 const facultyWorkload = [];
+
+// Helper to identify Indian Constitution subject (excluded from CIE marks views)
+const isICSubject = (sub) => {
+    if (!sub) return false;
+    const name = (sub.name || '').toUpperCase().trim();
+    return name === 'INDIAN CONSTITUTION';
+};
 const branchPerformanceData = {};
 const iaSubmissionStatus = { labels: ['Submitted', 'Pending'], datasets: [{ data: [70, 30], backgroundColor: ['#22c55e', '#ef4444'] }] };
 const resourceRequests = [];
@@ -137,11 +144,15 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const [departmentAlerts, setDepartmentAlerts] = useState([]);
     const [atRiskStudents, setAtRiskStudents] = useState([]);
     const [showAllAlerts, setShowAllAlerts] = useState(false);
-    const [selectedSemester, setSelectedSemester] = useState('all');
     const [hodGradeDistribution, setHodGradeDistribution] = useState({
         labels: ['A', 'B', 'C', 'D', 'F'],
         datasets: [{ data: [0, 0, 0, 0, 0], backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#6b7280'] }]
     });
+    const [selectedSemester, setSelectedSemester] = useState('1');
+    const [selectedInternal, setSelectedInternal] = useState('CIE1');
+    const [selectedSection, setSelectedSection] = useState('A');
+    const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
+    const [marksLoaded, setMarksLoaded] = useState(true);
 
     const toggleExpansion = (index) => {
         setExpandedApprovals(prev => ({
@@ -649,38 +660,43 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
 
 
     useEffect(() => {
-        if (selectedSubject && selectedSubject.id) {
-            const fetchMarks = async () => {
+        if (activeTab === 'update-marks' && selectedDept && selectedSemester !== 'all') {
+            const fetchAllSubjectMarks = async () => {
                 try {
                     const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                    const response = await fetch(`${API_BASE_URL}/marks/subject/${selectedSubject.id}`, { headers });
+                    const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub));
 
-                    if (response.ok) {
-                        const marksData = await response.json();
-                        console.log('Fetched Marks for Subject ' + selectedSubject.id, marksData);
-                        const marksMap = {};
+                    if (semSubjects.length === 0) return;
 
-                        // Populate editingMarks from DB data
-                        marksData.forEach(m => {
-                            if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
-                            // Treat 0 marks on PENDING status as null (not yet entered)
-                            const markValue = (m.marks === 0 || m.marks === null) && m.status === 'PENDING' ? null : m.marks;
-                            if (m.cieType === 'CIE1') marksMap[m.studentId].cie1 = markValue;
-                            if (m.cieType === 'CIE2') marksMap[m.studentId].cie2 = markValue;
-                            if (m.cieType === 'CIE3') marksMap[m.studentId].cie3 = markValue;
-                            if (m.cieType === 'CIE4') marksMap[m.studentId].cie4 = markValue;
-                            if (m.cieType === 'CIE5') marksMap[m.studentId].cie5 = markValue;
-                        });
-                        setEditingMarks(marksMap);
+                    const marksMap = {};
+                    let totalFound = 0;
+
+                    const targetCies = selectedInternal === 'All' ? ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'] : [selectedInternal];
+
+                    for (const sub of semSubjects) {
+                        const response = await fetch(`${API_BASE_URL}/marks/subject/${sub.id}`, { headers });
+                        if (response.ok) {
+                            const marksData = await response.json();
+                            marksData.forEach(m => {
+                                if (targetCies.includes(m.cieType)) {
+                                    if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
+                                    if (!marksMap[m.studentId][sub.id]) marksMap[m.studentId][sub.id] = {};
+                                    marksMap[m.studentId][sub.id][m.cieType] = m.marks;
+                                    totalFound++;
+                                }
+                            });
+                        }
                     }
+                    setEditingMarks(marksMap);
+                    setMarksLoaded(totalFound > 0);
                 } catch (e) {
-                    console.error("Failed to fetch marks for editing", e);
+                    console.error("Failed to fetch marks for all subjects", e);
                 }
             };
-            fetchMarks();
+            fetchAllSubjectMarks();
         }
-    }, [selectedSubject]);
+    }, [activeTab, selectedSemester, selectedInternal, selectedDept, subjects]);
 
     useEffect(() => {
         if (isMyDept && selectedDept) {
@@ -828,30 +844,60 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
 
     const handleLogout = () => { window.location.href = '/'; };
 
-    const handleMarkChange = (studentId, field, value) => {
+    const handleMarkChange = (studentId, subjectId, cieType, value) => {
         if (value === '') {
-            setEditingMarks(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: '' } }));
+            setEditingMarks(prev => ({
+                ...prev,
+                [studentId]: {
+                    ...prev[studentId],
+                    [subjectId]: {
+                        ...(prev[studentId]?.[subjectId] || {}),
+                        [cieType]: ''
+                    }
+                }
+            }));
             return;
         }
-        let numValue = parseInt(value, 10);
+        let numValue = parseFloat(value);
         if (isNaN(numValue)) return;
-        const max = 50; // Each CIE has max 50 marks
+        const max = 50;
         if (numValue < 0) numValue = 0; if (numValue > max) numValue = max;
-        setEditingMarks(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: numValue } }));
+        setEditingMarks(prev => ({
+            ...prev,
+            [studentId]: {
+                ...prev[studentId],
+                [subjectId]: {
+                    ...(prev[studentId]?.[subjectId] || {}),
+                    [cieType]: numValue
+                }
+            }
+        }));
     };
 
     const saveMarks = async () => {
-        if (!selectedSubject) return;
-
         const payload = [];
+        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub));
+
         Object.keys(editingMarks).forEach(studentId => {
-            const marks = editingMarks[studentId];
             const sid = Number(studentId);
-            if (marks.cie1 !== undefined && marks.cie1 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE1', co1: Number(marks.cie1) });
-            if (marks.cie2 !== undefined && marks.cie2 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE2', co1: Number(marks.cie2) });
-            if (marks.cie3 !== undefined && marks.cie3 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE3', co1: Number(marks.cie3) });
-            if (marks.cie4 !== undefined && marks.cie4 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE4', co1: Number(marks.cie4) });
-            if (marks.cie5 !== undefined && marks.cie5 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE5', co1: Number(marks.cie5) });
+            const studentSubjects = editingMarks[studentId];
+
+            Object.keys(studentSubjects).forEach(subjectId => {
+                const subId = Number(subjectId);
+                const cies = studentSubjects[subjectId];
+
+                Object.keys(cies).forEach(cieType => {
+                    const markValue = cies[cieType];
+                    if (markValue !== undefined && markValue !== null && markValue !== '') {
+                        payload.push({
+                            studentId: sid,
+                            subjectId: subId,
+                            iaType: cieType,
+                            co1: Number(markValue)
+                        });
+                    }
+                });
+            });
         });
 
         if (payload.length === 0) {
@@ -1649,34 +1695,223 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             {activeTab === 'all-students' && renderAllStudents()}
             {activeTab === 'student-mgmt' && renderStudentManagement()}
             {activeTab === 'overview' && (<div className={styles.overviewContainer}><div className={styles.statsRow}><div className={styles.statCard} onClick={() => setActiveTab('all-students')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.blue}`}><Users size={24} /></div><div className={styles.statInfo}><p>Total Students</p><h3>{deptStudents.length || 0}</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('faculty')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.green}`}><Briefcase size={24} /></div><div className={styles.statInfo}><p>Faculty Members</p><h3>{facultyList.length || 0}</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('performance')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.purple}`}><FileText size={24} /></div><div className={styles.statInfo}><p>Dept. Average</p><h3>{analytics ? analytics.average : '-'}/50</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('performance')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.orange}`}><Activity size={24} /></div><div className={styles.statInfo}><p>Pass Percentage</p><h3>{analytics ? analytics.passPercentage : '-'}%</h3></div></div></div><div className={styles.gridTwoOne}><div className={styles.leftColumn}><div className={styles.card} style={{ marginBottom: '1.5rem' }}><div className={styles.cardHeader}><h3>Department Performance (Avg IA Score)</h3></div><div className={styles.circlesContainer}><div className={styles.circlesContainer}>{analytics ? [{ label: 'Avg Percentage', value: Math.round(((analytics.average || 0) / 50) * 100) }, { label: 'Pass Rate', value: analytics.passPercentage || 0 }, { label: 'Risk Factor', value: (analytics.totalStudents || deptStudents.length) > 0 ? Math.round(((analytics.atRiskCount || 0) / (analytics.totalStudents || deptStudents.length)) * 100) : 0 }].map((metric, index) => { const data = { labels: ['Metric', 'Remaining'], datasets: [{ data: [metric.value, 100 - metric.value], backgroundColor: ['#8b5cf6', '#f3f4f6'], borderWidth: 0, cutout: '70%' }] }; return (<div key={index} className={styles.circleItem}><div style={{ height: '120px', width: '120px', position: 'relative' }}><Doughnut data={data} options={{ ...doughnutOptions, plugins: { legend: { display: false }, tooltip: { enabled: false } } }} /><div className={styles.circleLabel}><span className={styles.circleValue}>{metric.value}%</span></div></div><p className={styles.circleName}>{metric.label}</p></div>); }) : <p style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Loading Analytics...</p>}</div></div></div></div><div className={styles.rightColumn}><div className={styles.card}><div className={styles.cardHeader}><h3>Recent Alerts</h3>{departmentAlerts.length > 3 && (<button className={styles.secondaryBtn} style={{ fontSize: '0.8rem', padding: '4px 8px' }} onClick={() => setShowAllAlerts(!showAllAlerts)}>{showAllAlerts ? 'Show Less' : 'View All'}</button>)}</div><div className={styles.alertList}>{(showAllAlerts ? departmentAlerts : departmentAlerts.slice(0, 3)).map(alert => (<div key={alert.id} className={`${styles.alertItem} ${styles[alert.type]}`}><AlertTriangle size={16} /><div><p>{alert.message}</p><span>{alert.date}</span></div></div>))}</div></div></div></div></div>)}
-            {activeTab === 'update-marks' && (<div className={styles.updateMarksContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Modify Student Marks</h3><div className={styles.filterGroup}>
-                <select className={styles.deptSelect} value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)} style={{ marginRight: '10px' }}>
-                    <option value="all">All Semesters</option>
-                    {[1, 2, 3, 4, 5, 6].map(sem => (
-                        <option key={sem} value={sem}>{sem}{sem === 1 ? 'st' : sem === 2 ? 'nd' : sem === 3 ? 'rd' : 'th'} Semester</option>
-                    ))}
-                </select>
-                <select className={styles.deptSelect} value={selectedSubject?.id || ''} onChange={(e) => { const sub = subjects.find(s => s.id === parseInt(e.target.value)); setSelectedSubject(sub); }}>
-                    {subjects.filter(sub => {
-                        // Filter out IC
-                        if (sub.name === 'IC') return false;
+            {activeTab === 'update-marks' && (
+                <div className={styles.updateMarksContainer}>
+                    <div className={styles.card}>
+                        <div className={styles.cardHeader}>
+                            <h3>Modify Student Marks</h3>
+                        </div>
 
-                        // Check if subject is assigned to any faculty
-                        const isAssigned = facultyList.some(fac => parseSubjects(fac.subjects).includes(sub.name));
-                        // Also include if it's currently selected (to avoid it disappearing)
-                        return isAssigned || (selectedSubject && selectedSubject.id === sub.id);
-                    }).map(sub => (<option key={sub.id} value={sub.id}>{sub.name}</option>))}
-                </select><button className={styles.saveBtn} onClick={saveMarks}><Save size={16} /> Save Changes</button></div></div><p className={styles.helperText}>Edit marks directly in the table. Changes are tracked locally until saved. Max Marks: CIE-1 to CIE-5 (50 each) - Total (250)</p><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Sl. No.</th><th>Reg No</th><th>Student Name</th><th>Sem/Sec</th><th>CIE-1 (50)</th><th>CIE-2 (50)</th><th>CIE-3 (50)</th><th>CIE-4 (50)</th><th>CIE-5 (50)</th><th>Total (250)</th></tr></thead><tbody>{students.filter(s => selectedSemester === 'all' || s.semester == selectedSemester).map((student, index) => { const editMark = editingMarks[student.id] || {}; const valCIE1 = (editMark.cie1 !== undefined && editMark.cie1 !== null) ? editMark.cie1 : ''; const valCIE2 = (editMark.cie2 !== undefined && editMark.cie2 !== null) ? editMark.cie2 : ''; const valCIE3 = (editMark.cie3 !== undefined && editMark.cie3 !== null) ? editMark.cie3 : ''; const valCIE4 = (editMark.cie4 !== undefined && editMark.cie4 !== null) ? editMark.cie4 : ''; const valCIE5 = (editMark.cie5 !== undefined && editMark.cie5 !== null) ? editMark.cie5 : ''; const total = (Number(valCIE1) || 0) + (Number(valCIE2) || 0) + (Number(valCIE3) || 0) + (Number(valCIE4) || 0) + (Number(valCIE5) || 0); return (<tr key={student.id}><td>{index + 1}</td><td>{student.regNo}</td><td>{student.name}</td><td>{student.semester} - {student.section}</td><td><input type="number" className={styles.markInput} value={valCIE1} max={50} onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE2} max={50} onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE3} max={50} onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE4} max={50} onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE5} max={50} onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)} /></td><td style={{ fontWeight: 'bold' }}>{Math.min(total, 250)}</td></tr>); })}</tbody></table></div></div></div>)}
+                        <div className={styles.filterGrid}>
+                            <div className={styles.inputGroup}>
+                                <label>Select Semester <span className={styles.required}>*</span></label>
+                                <select className={styles.modernSelect} value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)}>
+                                    {[1, 2, 3, 4, 5, 6].map(sem => (
+                                        <option key={sem} value={sem}>Semester {sem}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className={styles.inputGroup}>
+                                <label>Select Internals <span className={styles.required}>*</span></label>
+                                <select className={styles.modernSelect} value={selectedInternal} onChange={(e) => setSelectedInternal(e.target.value)}>
+                                    {[
+                                        { val: 'CIE1', lab: 'CIE-1' },
+                                        { val: 'CIE2', lab: 'CIE-2' },
+                                        { val: 'CIE3', lab: 'CIE-3/SKILL TEST-1' },
+                                        { val: 'CIE4', lab: 'CIE-4/SKILL TEST-2' },
+                                        { val: 'CIE5', lab: 'CIE-5/ACTIVITY' },
+                                        { val: 'All', lab: 'All Internals' }
+                                    ].map(item => (
+                                        <option key={item.val} value={item.val}>{item.lab}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className={styles.inputGroup}>
+                                <label>Select Section <span className={styles.required}>*</span></label>
+                                <select className={styles.modernSelect} value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}>
+                                    <option value="A">Section A</option>
+                                    <option value="B">Section B</option>
+                                </select>
+                            </div>
+
+                            {selectedInternal === 'All' && (
+                                <div className={styles.inputGroup}>
+                                    <label>Select Subject</label>
+                                    <select className={styles.modernSelect} value={selectedSubjectFilter} onChange={(e) => setSelectedSubjectFilter(e.target.value)}>
+                                        <option value="all">All Subjects</option>
+                                        {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).map(sub => (
+                                            <option key={sub.id} value={String(sub.id)}>{sub.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className={styles.actionGroup}>
+                                <button className={styles.saveBtn} onClick={saveMarks} disabled={selectedSemester === 'all'}>
+                                    <Save size={16} /> Save Changes
+                                </button>
+                            </div>
+                        </div>
+
+                        {selectedSemester !== 'all' && !marksLoaded && (
+                            <div style={{ margin: '1rem', padding: '0.75rem', background: '#fff7ed', color: '#c2410c', borderRadius: '8px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertTriangle size={18} />
+                                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>
+                                    Notice: Marks for {selectedInternal === 'All' ? 'any Internal' : selectedInternal} have not been uploaded for {selectedSemester}{selectedSemester == 1 ? 'st' : selectedSemester == 2 ? 'nd' : selectedSemester == 3 ? 'rd' : 'th'} semester yet.
+                                </span>
+                            </div>
+                        )}
+
+                        <p className={styles.helperText}>
+                            {selectedSemester === 'all'
+                                ? 'Please select a semester to start entering marks.'
+                                : `Entering marks for ${selectedInternal === 'All' ? 'All Internals' : selectedInternal} - ${selectedSemester}${selectedSemester == 1 ? 'st' : selectedSemester == 2 ? 'nd' : selectedSemester == 3 ? 'rd' : 'th'} Semester, Section ${selectedSection}.`}
+                        </p>
+
+                        <div className={styles.tableWrapper}>
+                            <table className={`${styles.table} ${selectedInternal === 'All' && selectedSubjectFilter === 'all' ? styles.wideTable : ''}`}>
+                                <colgroup>
+                                    <col style={{ width: '50px' }} />
+                                    <col style={{ width: '120px' }} />
+                                    <col style={{ width: '200px' }} />
+                                    {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => (
+                                        Array.from({ length: selectedInternal === 'All' ? 5 : 1 }).map((_, i) => (
+                                            <col key={`${sub.id}-${i}`} style={selectedInternal === 'All' ? { width: selectedSubjectFilter !== 'all' ? 'auto' : '90px' } : {}} />
+                                        ))
+                                    ))}
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={styles.idHeader}>
+                                            <div className={styles.subjectHeaderContent}>
+                                                <Hash size={14} className={styles.subjectIcon} />
+                                                <span>Sl. No.</span>
+                                            </div>
+                                        </th>
+                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={styles.idHeader}>
+                                            <div className={styles.subjectHeaderContent}>
+                                                <Fingerprint size={14} className={styles.subjectIcon} />
+                                                <span>Reg No</span>
+                                            </div>
+                                        </th>
+                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={`${styles.idHeader} ${styles.nameHeader}`}>
+                                            <div className={styles.subjectHeaderContent}>
+                                                <Users size={14} className={styles.subjectIcon} />
+                                                <span>Student Name</span>
+                                            </div>
+                                        </th>
+                                        {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => (
+                                            <th key={sub.id} colSpan={selectedInternal === 'All' ? 5 : 1} className={styles.subjectHeader}>
+                                                <div className={styles.subjectHeaderContent}>
+                                                    <BookOpen size={14} className={styles.subjectIcon} />
+                                                    <span>{sub.name}</span>
+                                                </div>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                    {selectedInternal === 'All' ? (
+                                        <tr>
+                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => {
+                                                const singleSubStyle = selectedSubjectFilter !== 'all' ? { textAlign: 'center', fontSize: '0.85rem', fontWeight: 500, padding: '8px 10px' } : {};
+                                                return (
+                                                    <React.Fragment key={sub.id}>
+                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-1</th>
+                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-2</th>
+                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-3<br />SKILL TEST-1</th>
+                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-4<br />SKILL TEST-2</th>
+                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-5/ACTIVITY</th>
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </tr>
+                                    ) : (
+                                        <tr>
+                                            <th colSpan={3}></th>
+                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => (
+                                                <th key={sub.id} className={styles.cieSubHeader}>
+                                                    {selectedInternal === 'CIE1' ? 'CIE1' :
+                                                        selectedInternal === 'CIE2' ? 'CIE2' :
+                                                            selectedInternal === 'CIE3' ? <>CIE-3<br />SKILL TEST-1</> :
+                                                                selectedInternal === 'CIE4' ? <>CIE-4<br />SKILL TEST-2</> :
+                                                                    selectedInternal === 'CIE5' ? 'ACTIVITY' :
+                                                                        selectedInternal} (50)
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    )}
+                                </thead>
+                                <tbody>
+                                    {selectedSemester !== 'all' ? students.filter(s => String(s.semester) === String(selectedSemester) && s.section === selectedSection).map((student, index) => {
+                                        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter);
+                                        return (
+                                            <tr key={student.id}>
+                                                <td className={styles.slNoCell}>{index + 1}</td>
+                                                <td className={styles.regNoCell}>{student.regNo}</td>
+                                                <td className={styles.studentNameCell}>
+                                                    <div className={styles.studentInfoWrapper}>
+                                                        <User size={14} className={styles.userIcon} />
+                                                        <span>{student.name}</span>
+                                                    </div>
+                                                </td>
+                                                {semSubjects.map(sub => (
+                                                    selectedInternal === 'All' ? (
+                                                        <React.Fragment key={sub.id}>
+                                                            {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
+                                                                <td key={cie} style={selectedSubjectFilter !== 'all' ? { textAlign: 'center' } : {}}>
+                                                                    <input
+                                                                        type="number"
+                                                                        className={styles.markInput}
+                                                                        value={editingMarks[student.id]?.[sub.id]?.[cie] ?? ''}
+                                                                        max={50}
+                                                                        style={selectedSubjectFilter !== 'all' ? { width: '60px', padding: '6px', fontSize: '0.9rem', textAlign: 'center' } : { width: '45px', padding: '4px' }}
+                                                                        onChange={(e) => handleMarkChange(student.id, sub.id, cie, e.target.value)}
+                                                                    />
+                                                                </td>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    ) : (
+                                                        <td key={sub.id}>
+                                                            <input
+                                                                type="number"
+                                                                className={styles.markInput}
+                                                                value={editingMarks[student.id]?.[sub.id]?.[selectedInternal] ?? ''}
+                                                                max={50}
+                                                                onChange={(e) => handleMarkChange(student.id, sub.id, selectedInternal, e.target.value)}
+                                                            />
+                                                        </td>
+                                                    )
+                                                ))}
+                                            </tr>
+                                        );
+                                    }) : (
+                                        <tr>
+                                            <td colSpan="30" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                                                Select a semester to view student list
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
             {activeTab === 'monitoring' && (
                 <div className={styles.monitoringContainer}>
                     <div className={styles.card}>
                         <div className={styles.cardHeader}>
-                            <h3>Subject-wise IA Submission Status</h3>
+                            <h3>Subject-wise CIE Submission Status</h3>
                             <div className={styles.filterGroup}>
                                 <select className={styles.deptSelect} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
                                     <option>All Semesters</option>
+                                    <option>1st Semester</option>
                                     <option>2nd Semester</option>
+                                    <option>3rd Semester</option>
                                     <option>4th Semester</option>
+                                    <option>5th Semester</option>
+                                    <option>6th Semester</option>
                                 </select>
                             </div>
                         </div>
@@ -1690,7 +1925,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {subjects.filter(sub => sub.name !== 'IC').map((subject, idx) => {
+                                {subjects.map((subject, idx) => {
                                     const subjectMarks = subjectMarksData[subject.name] || [];
                                     const totalStudents = deptStudents.length;
                                     const studentsWithMarks = subjectMarks.filter(mark => mark.cie1Score !== null || mark.cie2Score !== null || mark.cie3Score !== null).length;

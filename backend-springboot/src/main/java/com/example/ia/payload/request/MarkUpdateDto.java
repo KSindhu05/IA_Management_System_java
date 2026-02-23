@@ -4,8 +4,8 @@ public class MarkUpdateDto {
     private Long studentId;
     private Long subjectId;
     private String iaType; // CIE1, CIE2...
-    private Double co1; // Marks
-    private Double co2; // Ignored for now
+    private Double co1; // Marks (out of 50)
+    private Double attendance; // Attendance percentage (0-100)
 
     public MarkUpdateDto() {
     }
@@ -42,11 +42,11 @@ public class MarkUpdateDto {
         this.co1 = co1;
     }
 
-    public Double getCo2() {
-        return co2;
+    public Double getAttendance() {
+        return attendance;
     }
 
-    public void setCo2(Double co2) {
-        this.co2 = co2;
+    public void setAttendance(Double attendance) {
+        this.attendance = attendance;
     }
 }

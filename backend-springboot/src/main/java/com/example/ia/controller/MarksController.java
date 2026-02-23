@@ -65,6 +65,7 @@ public class MarksController {
                 mark.setSubject(subject);
                 mark.setCieType(dto.getIaType());
                 mark.setMarks(dto.getCo1());
+                mark.setAttendance(dto.getAttendance());
                 marksToSave.add(mark);
             }
         }

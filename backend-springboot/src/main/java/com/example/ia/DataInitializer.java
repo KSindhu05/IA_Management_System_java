@@ -57,18 +57,25 @@ public class DataInitializer {
                 System.out.println("✅ Cleaned up 'Advanced Java' subject and marks.");
             });
 
+            // CLEANUP: Remove marks for Indian Constitution if they exist (KEEP the
+            // subject)
+            subjectRepository.findByName("Indian Constitution").ifPresent(subject -> {
+                java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository
+                        .findBySubject_Id(subject.getId());
+                if (!marks.isEmpty()) {
+                    cieMarkRepository.deleteAll(marks);
+                    System.out
+                            .println("🗑️ Deleted " + marks.size() + " marks for Indian Constitution (kept subject).");
+                }
+            });
+
             // CLEANUP: Remove Marks for 459CS25001 for DBMS and Software Engineering
             // This is to remove them from Student Dashboard but keep data for Faculty (via
             // 459CS25002)
             List.of("DBMS", "Software Engineering").forEach(subName -> {
                 subjectRepository.findByName(subName).ifPresent(subject -> {
                     studentRepository.findByRegNo("459CS25001").ifPresent(student -> {
-                        List<com.example.ia.entity.CieMark> marks = cieMarkRepository
-                                .findByStudent_IdAndSubject_IdAndCieType(student.getId(), subject.getId(), "CIE1")
-                                .map(List::of).orElse(List.of());
                         // Actually better to find all marks for this student and subject
-                        // But repo only has findByStudent_IdAndSubject_IdAndCieType returning Optional
-                        // We need a list finder? Or just delete specific ones we seeded.
                         // We seeded CIE1 and CIE2 for DBMS, and CIE1 for SE.
                         // Let's rely on the specific deletion logic or loop.
                         // Or just use the repo's delete method if we fetch them.
@@ -99,9 +106,13 @@ public class DataInitializer {
                 System.out.println("✅ Principal user created: PRINCIPAL / " + defaultPassword);
             }
 
-            // 2. HOD
-            User hodUser = userRepository.findByUsername("HOD001").orElse(new User());
-            hodUser.setUsername("HOD001");
+            // 2. HOD — cleanup old username if it exists
+            userRepository.findByUsername("HOD001").ifPresent(oldHod -> {
+                userRepository.delete(oldHod);
+                System.out.println("🗑️ Deleted old HOD user: HOD001");
+            });
+            User hodUser = userRepository.findByUsername("Jaffar@CSE").orElse(new User());
+            hodUser.setUsername("Jaffar@CSE");
             hodUser.setPassword(passwordEncoder.encode(defaultPassword));
             hodUser.setEmail("hod.cs@example.com");
             hodUser.setRole("HOD");
@@ -109,7 +120,7 @@ public class DataInitializer {
             hodUser.setDesignation("Head of Department");
             hodUser.setDepartment("CSE");
             userRepository.save(hodUser);
-            System.out.println("✅ HOD user updated: HOD001 (MD Jaffar)");
+            System.out.println("✅ HOD user updated: Jaffar@CSE (MD Jaffar)");
 
             // 3. Faculty Seeding
             // FAC001 - Miss Manju Sree
@@ -266,6 +277,57 @@ public class DataInitializer {
             createSubjectIfNotFound(subjectRepository, "Indian Constitution", "CSE", "Wahida Banu", 2);
             createSubjectIfNotFound(subjectRepository, "English Communication", "CSE", "Nasrin Banu", 2);
 
+            // ==========================================
+            // SEED MARKS: Add sample CIE marks for students
+            // ==========================================
+            String[] subjects = { "Engineering Maths-II", "CAEG", "Python",
+                    "English Communication" };
+            double[][] sampleScores = {
+                    { 42, 38, 45, 35 }, // Student 1
+                    { 35, 40, 30, 42 }, // Student 2
+                    { 28, 32, 35, 25 }, // Student 3
+                    { 45, 42, 48, 40 }, // Student 4
+                    { 30, 25, 28, 30 }, // Student 5
+                    { 38, 35, 40, 33 }, // Student 6
+                    { 20, 22, 18, 20 }, // Student 7
+                    { 40, 38, 42, 36 }, // Student 8
+                    { 33, 30, 35, 28 }, // Student 9
+                    { 45, 48, 46, 42 }, // Student 10
+            };
+
+            // ==========================================
+            // FIX: Update PENDING marks to SUBMITTED — only if they have actual marks
+            // Delete PENDING records with null marks (empty placeholders)
+            // ==========================================
+            List<com.example.ia.entity.CieMark> pendingMarks = cieMarkRepository.findAll()
+                    .stream()
+                    .filter(m -> "PENDING".equalsIgnoreCase(m.getStatus()))
+                    .collect(java.util.stream.Collectors.toList());
+            if (!pendingMarks.isEmpty()) {
+                List<com.example.ia.entity.CieMark> withMarks = pendingMarks.stream()
+                        .filter(m -> m.getMarks() != null)
+                        .collect(java.util.stream.Collectors.toList());
+                List<com.example.ia.entity.CieMark> withoutMarks = pendingMarks.stream()
+                        .filter(m -> m.getMarks() == null)
+                        .collect(java.util.stream.Collectors.toList());
+                withMarks.forEach(m -> m.setStatus("SUBMITTED"));
+                cieMarkRepository.saveAll(withMarks);
+                if (!withoutMarks.isEmpty()) {
+                    cieMarkRepository.deleteAll(withoutMarks);
+                    System.out.println("🗑️ Deleted " + withoutMarks.size() + " empty placeholder marks");
+                }
+                System.out.println("✅ Updated " + withMarks.size() + " PENDING marks with data to SUBMITTED");
+            }
+
+            for (int i = 0; i < 10; i++) {
+                String regNo = String.format("459CS25%03d", i + 1);
+                for (int j = 0; j < subjects.length; j++) {
+                    seedMarks(studentRepository, userRepository, subjectRepository, cieMarkRepository,
+                            regNo, subjects[j], "CIE1", sampleScores[i][j]);
+                }
+            }
+            System.out.println("✅ Sample CIE marks seeded for 10 students");
+
         };
     }
 
@@ -296,16 +358,27 @@ public class DataInitializer {
         com.example.ia.entity.Subject subject = subjectRepo.findByName(subjectName).orElse(null);
 
         if (student != null && subject != null) {
-            if (marksRepo.findByStudent_IdAndSubject_IdAndCieType(student.getId(), subject.getId(), cieType)
-                    .isEmpty()) {
+            java.util.Optional<com.example.ia.entity.CieMark> existing = marksRepo
+                    .findByStudent_IdAndSubject_IdAndCieType(student.getId(), subject.getId(), cieType);
+            if (existing.isEmpty()) {
+                // Create new mark
                 com.example.ia.entity.CieMark mark = new com.example.ia.entity.CieMark();
                 mark.setStudent(student);
                 mark.setSubject(subject);
                 mark.setCieType(cieType);
                 mark.setMarks(score);
-                mark.setStatus("SUBMITTED"); // So HOD can see it
+                mark.setStatus("SUBMITTED");
                 marksRepo.save(mark);
                 System.out.println("✅ Mark seeded: " + regNo + " " + subjectName + " " + cieType);
+            } else {
+                // Update existing mark: ensure it's SUBMITTED and has correct score
+                com.example.ia.entity.CieMark mark = existing.get();
+                if ("PENDING".equalsIgnoreCase(mark.getStatus()) || mark.getMarks() == null) {
+                    mark.setMarks(score);
+                    mark.setStatus("SUBMITTED");
+                    marksRepo.save(mark);
+                    System.out.println("✅ Mark updated to SUBMITTED: " + regNo + " " + subjectName + " " + cieType);
+                }
             }
         }
     }

@@ -54,6 +54,7 @@ public class MarksService {
             if (existing.isPresent()) {
                 CieMark mark = existing.get();
                 mark.setMarks(payload.getMarks());
+                mark.setAttendance(payload.getAttendance());
                 // Reset status to PENDING so faculty can re-submit (handles REJECTED re-edits)
                 mark.setStatus("PENDING");
                 cieMarkRepository.save(mark);
@@ -106,6 +107,7 @@ public class MarksService {
         return cieMarkRepository.findByStudent_Id(student.getId())
                 .stream()
                 .filter(m -> !"PENDING".equalsIgnoreCase(m.getStatus()))
+                .filter(m -> m.getMarks() != null) // Exclude empty placeholders
                 .collect(java.util.stream.Collectors.toList());
     }
 

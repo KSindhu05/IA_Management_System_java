@@ -5,7 +5,7 @@
 | Role | Username | Password | Notes |
 | :--- | :--- | :--- | :--- |
 | **Principal** | `PRINCIPAL` | `password` | Full Access (Admin) |
-| **HOD (Computer Science)** | `HOD001` | `password` | Department Head Access (MD Jaffar) |
+| **HOD (Computer Science)** | `Jaffar@CSE` | `password` | Department Head Access (MD Jaffar) |
 
 ## Faculty Roles
 
