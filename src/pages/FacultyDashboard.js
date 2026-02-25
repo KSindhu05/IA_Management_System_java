@@ -1472,11 +1472,15 @@ const FacultyDashboard = () => {
     };
 
     const renderMyStudents = () => {
-        // Use API students
-        // Filter by subjects? Or just show all? Usually faculty wants to see kids in their classes.
-        // For now showing all students but we could filter by those in 'mySubjects' classes if we had enrollment data.
-        // Assuming studentsList are all students in the dept.
+        // Derive unique departments from students for department filter
+        const studentDepartments = ['All', ...new Set(students.map(s => s.department).filter(Boolean))].sort((a, b) => a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b));
+
         const filteredStudents = students
+            .filter(s => {
+                // Department filter
+                if (selectedDept !== 'All' && s.department !== selectedDept) return false;
+                return true;
+            })
             .filter(s =>
                 s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (s.rollNo || s.regNo).toLowerCase().includes(searchTerm.toLowerCase())
@@ -1598,6 +1602,25 @@ const FacultyDashboard = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Department Filter Bar */}
+                {studentDepartments.length > 2 && (
+                    <div className={styles.deptFilterBar}>
+                        <Building2 size={16} style={{ color: '#6b7280', flexShrink: 0 }} />
+                        <span className={styles.deptFilterLabel}>Department:</span>
+                        <div className={styles.deptPillGroup}>
+                            {studentDepartments.map(dept => (
+                                <button
+                                    key={dept}
+                                    className={`${styles.deptPill} ${selectedDept === dept ? styles.deptPillActive : ''}`}
+                                    onClick={() => handleDeptFilterChange(dept)}
+                                >
+                                    {dept === 'All' ? 'All' : dept}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className={styles.card}>
                     <div className={styles.studentTableContainer}>

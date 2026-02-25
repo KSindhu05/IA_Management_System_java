@@ -640,6 +640,13 @@
     border-radius: 6px;
     text-align: center;
     background: white;
+    -moz-appearance: textfield;
+}
+
+.markInput::-webkit-outer-spin-button,
+.markInput::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .markInput:focus {
@@ -1637,4 +1644,65 @@
     font-weight: 600;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+}
+
+/* Department Filter Bar */
+.deptFilterBar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+
+.deptFilterLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+}
+
+.deptPillGroup {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.deptPill {
+    padding: 0.35rem 0.9rem;
+    border-radius: 99px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #475569;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.deptPill:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+.deptPillActive {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    color: white;
+    border-color: #2563eb;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.deptPillActive:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    color: white;
+    border-color: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.35);
 }

@@ -1590,7 +1590,33 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 <option key={sec} value={sec}>Section {sec}</option>
                             ))}
                         </select>
-                        <button className={styles.primaryBtn} onClick={() => alert("Export Feature Coming Soon")}>
+                        <button className={styles.primaryBtn} onClick={() => {
+                            if (filteredStudents.length === 0) {
+                                alert('No students to export.');
+                                return;
+                            }
+                            const headers = ['Sl.No', 'Reg No', 'Student Name', 'Semester', 'Section', 'Parent Phone'];
+                            const rows = filteredStudents.map((std, idx) => [
+                                idx + 1,
+                                std.regNo || '',
+                                `"${(std.name || '').replace(/"/g, '""')}"`,
+                                std.semester || '',
+                                std.section || 'A',
+                                std.parentPhone || ''
+                            ].join(','));
+                            const csvContent = [headers.join(','), ...rows].join('\n');
+                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            const semLabel = studentFilterSem === 'all' ? 'AllSem' : `Sem${studentFilterSem}`;
+                            const secLabel = studentFilterSec === 'all' ? 'AllSec' : `Sec${studentFilterSec}`;
+                            link.download = `Students_${selectedDept}_${semLabel}_${secLabel}.csv`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                        }}>
                             <Download size={18} /> Export List
                         </button>
                     </div>
