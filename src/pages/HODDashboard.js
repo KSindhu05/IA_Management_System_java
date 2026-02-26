@@ -5,7 +5,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import {
     LayoutDashboard, Users, FileText, CheckCircle, TrendingUp, BarChart2,
     AlertTriangle, Briefcase, Bell, Activity, Clock, Award,
-    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus, Upload, GitPullRequest, User, Hash, Fingerprint
+    Edit, Save, LogOut, ShieldAlert, X, BookOpen, Layers, Megaphone, Calendar, MapPin, PenTool, Download, Mail, Trash2, Key, UserPlus, Upload, GitPullRequest
 } from 'lucide-react';
 import {
     departments, subjectsByDept, getStudentsByDept, englishMarks, mathsMarks,
@@ -28,13 +28,6 @@ ChartJS.register(
 const hodTrendData = { labels: ['2022', '2023', '2024'], datasets: [{ label: 'Pass %', data: [75, 80, 85], borderColor: '#3b82f6', fill: false }] };
 // atRiskStudents is now a state, see useState below
 const facultyWorkload = [];
-
-// Helper to identify Indian Constitution subject (excluded from CIE marks views)
-const isICSubject = (sub) => {
-    if (!sub) return false;
-    const name = (sub.name || '').toUpperCase().trim();
-    return name === 'INDIAN CONSTITUTION';
-};
 const branchPerformanceData = {};
 const iaSubmissionStatus = { labels: ['Submitted', 'Pending'], datasets: [{ data: [70, 30], backgroundColor: ['#22c55e', '#ef4444'] }] };
 const resourceRequests = [];
@@ -78,7 +71,6 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const [selectedStudentProfile, setSelectedStudentProfile] = useState(null);
     const [studentMarksProfile, setStudentMarksProfile] = useState([]);
     const [showProfileModal, setShowProfileModal] = useState(false);
-    const [selectedProfileCIE, setSelectedProfileCIE] = useState('CIE1');
 
     // API State
     const [subjects, setSubjects] = useState([]);
@@ -145,15 +137,11 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const [departmentAlerts, setDepartmentAlerts] = useState([]);
     const [atRiskStudents, setAtRiskStudents] = useState([]);
     const [showAllAlerts, setShowAllAlerts] = useState(false);
+    const [selectedSemester, setSelectedSemester] = useState('all');
     const [hodGradeDistribution, setHodGradeDistribution] = useState({
         labels: ['A', 'B', 'C', 'D', 'F'],
         datasets: [{ data: [0, 0, 0, 0, 0], backgroundColor: ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#6b7280'] }]
     });
-    const [selectedSemester, setSelectedSemester] = useState('1');
-    const [selectedInternal, setSelectedInternal] = useState('CIE1');
-    const [selectedSection, setSelectedSection] = useState('A');
-    const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
-    const [marksLoaded, setMarksLoaded] = useState(true);
 
     const toggleExpansion = (index) => {
         setExpandedApprovals(prev => ({
@@ -661,48 +649,38 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
 
 
     useEffect(() => {
-        if (activeTab === 'update-marks' && selectedDept && selectedSemester !== 'all') {
-            const fetchAllSubjectMarks = async () => {
+        if (selectedSubject && selectedSubject.id) {
+            const fetchMarks = async () => {
                 try {
                     const token = user?.token;
                     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-                    const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub));
+                    const response = await fetch(`${API_BASE_URL}/marks/subject/${selectedSubject.id}`, { headers });
 
-                    if (semSubjects.length === 0) return;
+                    if (response.ok) {
+                        const marksData = await response.json();
+                        console.log('Fetched Marks for Subject ' + selectedSubject.id, marksData);
+                        const marksMap = {};
 
-                    const marksMap = {};
-                    let totalFound = 0;
-
-                    const targetCies = selectedInternal === 'All' ? ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'] : [selectedInternal];
-
-                    for (const sub of semSubjects) {
-                        const response = await fetch(`${API_BASE_URL}/marks/subject/${sub.id}`, { headers });
-                        if (response.ok) {
-                            const marksData = await response.json();
-                            marksData.forEach(m => {
-                                if (targetCies.includes(m.cieType)) {
-                                    if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
-                                    if (!marksMap[m.studentId][sub.id]) marksMap[m.studentId][sub.id] = {};
-                                    marksMap[m.studentId][sub.id][m.cieType] = m.marks;
-                                    // Store attendance under _att key
-                                    if (m.attendance != null) {
-                                        if (!marksMap[m.studentId][sub.id]._att) marksMap[m.studentId][sub.id]._att = {};
-                                        marksMap[m.studentId][sub.id]._att[m.cieType] = m.attendance;
-                                    }
-                                    totalFound++;
-                                }
-                            });
-                        }
+                        // Populate editingMarks from DB data
+                        marksData.forEach(m => {
+                            if (!marksMap[m.studentId]) marksMap[m.studentId] = {};
+                            // Treat 0 marks on PENDING status as null (not yet entered)
+                            const markValue = (m.marks === 0 || m.marks === null) && m.status === 'PENDING' ? null : m.marks;
+                            if (m.cieType === 'CIE1') marksMap[m.studentId].cie1 = markValue;
+                            if (m.cieType === 'CIE2') marksMap[m.studentId].cie2 = markValue;
+                            if (m.cieType === 'CIE3') marksMap[m.studentId].cie3 = markValue;
+                            if (m.cieType === 'CIE4') marksMap[m.studentId].cie4 = markValue;
+                            if (m.cieType === 'CIE5') marksMap[m.studentId].cie5 = markValue;
+                        });
+                        setEditingMarks(marksMap);
                     }
-                    setEditingMarks(marksMap);
-                    setMarksLoaded(totalFound > 0);
                 } catch (e) {
-                    console.error("Failed to fetch marks for all subjects", e);
+                    console.error("Failed to fetch marks for editing", e);
                 }
             };
-            fetchAllSubjectMarks();
+            fetchMarks();
         }
-    }, [activeTab, selectedSemester, selectedInternal, selectedDept, subjects]);
+    }, [selectedSubject]);
 
     useEffect(() => {
         if (isMyDept && selectedDept) {
@@ -850,101 +828,30 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
 
     const handleLogout = () => { window.location.href = '/'; };
 
-    const handleMarkChange = (studentId, subjectId, cieType, value) => {
+    const handleMarkChange = (studentId, field, value) => {
         if (value === '') {
-            setEditingMarks(prev => ({
-                ...prev,
-                [studentId]: {
-                    ...prev[studentId],
-                    [subjectId]: {
-                        ...(prev[studentId]?.[subjectId] || {}),
-                        [cieType]: ''
-                    }
-                }
-            }));
+            setEditingMarks(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: '' } }));
             return;
         }
-        let numValue = parseFloat(value);
+        let numValue = parseInt(value, 10);
         if (isNaN(numValue)) return;
-        const max = 50;
+        const max = 50; // Each CIE has max 50 marks
         if (numValue < 0) numValue = 0; if (numValue > max) numValue = max;
-        setEditingMarks(prev => ({
-            ...prev,
-            [studentId]: {
-                ...prev[studentId],
-                [subjectId]: {
-                    ...(prev[studentId]?.[subjectId] || {}),
-                    [cieType]: numValue
-                }
-            }
-        }));
-    };
-
-    const handleAttendanceChange = (studentId, subjectId, cieType, value) => {
-        if (value === '') {
-            setEditingMarks(prev => ({
-                ...prev,
-                [studentId]: {
-                    ...prev[studentId],
-                    [subjectId]: {
-                        ...(prev[studentId]?.[subjectId] || {}),
-                        _att: {
-                            ...(prev[studentId]?.[subjectId]?._att || {}),
-                            [cieType]: ''
-                        }
-                    }
-                }
-            }));
-            return;
-        }
-        let numValue = parseFloat(value);
-        if (isNaN(numValue)) return;
-        if (numValue < 0) numValue = 0; if (numValue > 100) numValue = 100;
-        setEditingMarks(prev => ({
-            ...prev,
-            [studentId]: {
-                ...prev[studentId],
-                [subjectId]: {
-                    ...(prev[studentId]?.[subjectId] || {}),
-                    _att: {
-                        ...(prev[studentId]?.[subjectId]?._att || {}),
-                        [cieType]: numValue
-                    }
-                }
-            }
-        }));
+        setEditingMarks(prev => ({ ...prev, [studentId]: { ...prev[studentId], [field]: numValue } }));
     };
 
     const saveMarks = async () => {
+        if (!selectedSubject) return;
+
         const payload = [];
-        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub));
-
         Object.keys(editingMarks).forEach(studentId => {
+            const marks = editingMarks[studentId];
             const sid = Number(studentId);
-            const studentSubjects = editingMarks[studentId];
-
-            Object.keys(studentSubjects).forEach(subjectId => {
-                const subId = Number(subjectId);
-                const cies = studentSubjects[subjectId];
-                const attData = cies._att || {};
-
-                Object.keys(cies).forEach(cieType => {
-                    if (cieType === '_att') return; // Skip attendance sub-object
-                    const markValue = cies[cieType];
-                    const attValue = attData[cieType];
-                    const hasMarks = markValue !== undefined && markValue !== null && markValue !== '';
-                    const hasAtt = attValue !== undefined && attValue !== null && attValue !== '';
-                    if (hasMarks || hasAtt) {
-                        payload.push({
-                            studentId: sid,
-                            subjectId: subId,
-                            iaType: cieType,
-                            co1: hasMarks ? Number(markValue) : null,
-                            attendance: hasAtt ? Number(attValue) : null
-                        });
-                    }
-                });
-            });
+            if (marks.cie1 !== undefined && marks.cie1 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE1', co1: Number(marks.cie1) });
+            if (marks.cie2 !== undefined && marks.cie2 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE2', co1: Number(marks.cie2) });
+            if (marks.cie3 !== undefined && marks.cie3 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE3', co1: Number(marks.cie3) });
+            if (marks.cie4 !== undefined && marks.cie4 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE4', co1: Number(marks.cie4) });
+            if (marks.cie5 !== undefined && marks.cie5 !== null) payload.push({ studentId: sid, subjectId: selectedSubject.id, iaType: 'CIE5', co1: Number(marks.cie5) });
         });
 
         if (payload.length === 0) {
@@ -971,60 +878,6 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             console.error(e);
             alert('Error updating marks');
         }
-    };
-
-    const downloadMarksCSV = () => {
-        if (selectedSemester === 'all') {
-            alert('Please select a semester first.');
-            return;
-        }
-        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester) && !isICSubject(sub))
-            .filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter);
-        const filteredStudents = students.filter(s => String(s.semester) === String(selectedSemester) && s.section === selectedSection);
-
-        if (filteredStudents.length === 0) {
-            alert('No students to download.');
-            return;
-        }
-
-        const cies = selectedInternal === 'All' ? ['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'] : [selectedInternal];
-
-        // Build header row
-        let headers = ['Sl.No', 'Reg No', 'Student Name'];
-        semSubjects.forEach(sub => {
-            cies.forEach(cie => headers.push(`${sub.name} - ${cie}`));
-            headers.push(`${sub.name} - Att%`);
-        });
-
-        // Build data rows
-        const rows = filteredStudents.map((student, idx) => {
-            let row = [idx + 1, student.regNo, `"${student.name}"`];
-            semSubjects.forEach(sub => {
-                const subData = editingMarks[student.id]?.[sub.id] || {};
-                const attData = subData._att || {};
-                cies.forEach(cie => row.push(subData[cie] ?? ''));
-                if (selectedInternal === 'All') {
-                    const attVals = Object.values(attData).filter(v => v != null);
-                    const avgAtt = attVals.length > 0 ? Math.round(attVals.reduce((a, b) => a + b, 0) / attVals.length) : '';
-                    row.push(avgAtt !== '' ? `${avgAtt}%` : '');
-                } else {
-                    const att = attData[selectedInternal];
-                    row.push(att != null ? `${Math.round(att)}%` : '');
-                }
-            });
-            return row.join(',');
-        });
-
-        const csvContent = [headers.join(','), ...rows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Marks_Sem${selectedSemester}_${selectedSection}_${selectedInternal === 'All' ? 'AllCIEs' : selectedInternal}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
     };
 
     const handleApproveMarks = async (subjectId, iaType) => {
@@ -1630,11 +1483,10 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 <th style={{ width: '60px' }}>Sl. No</th>
                                 <th>Student Name</th>
                                 <th>Reg No</th>
-
                                 <th>Sem / Sec</th>
-
-                                <th>Action</th>
                                 <th>Parent Phone</th>
+                                <th>Action</th>
+
                             </tr>
                         </thead>
                         <tbody>
@@ -1647,6 +1499,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
 
 
                                     <td>{std.semester} - {std.section || 'A'}</td>
+                                    <td>{std.parentPhone || '-'}</td>
                                     <td>
                                         <button
                                             className={styles.secondaryBtn}
@@ -1656,9 +1509,6 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                             <Users size={14} /> View Profile
                                         </button>
                                     </td>
-
-
-                                    <td>{std.parentPhone || '-'}</td>
 
                                 </tr>
                             )) : (
@@ -1678,24 +1528,6 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     const renderStudentProfileModal = () => {
         if (!showProfileModal || !selectedStudentProfile) return null;
 
-        // Group marks by subject
-        const subjectMap = {};
-        studentMarksProfile.forEach(mark => {
-            const subId = mark.subject?.id || mark.subjectId;
-            if (!subjectMap[subId]) {
-                subjectMap[subId] = {
-                    name: mark.subject?.name || '-',
-                    code: mark.subject?.code || '',
-                    cies: {}
-                };
-            }
-            subjectMap[subId].cies[mark.cieType] = {
-                marks: mark.marks ?? mark.totalScore ?? null,
-                attendance: mark.attendance ?? null
-            };
-        });
-        const groupedSubjects = Object.values(subjectMap);
-
         return (
             <div className={styles.modalOverlay}>
                 <div className={styles.modalContent} style={{ maxWidth: '800px', width: '90%' }}>
@@ -1714,58 +1546,31 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                         </button>
                     </div>
                     <div className={styles.modalBody}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h4 style={{ margin: 0, color: '#334155' }}>CIE Marks Overview</h4>
-                            <select
-                                value={selectedProfileCIE}
-                                onChange={(e) => setSelectedProfileCIE(e.target.value)}
-                                style={{
-                                    padding: '0.4rem 0.8rem',
-                                    borderRadius: '8px',
-                                    border: '1px solid #e2e8f0',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 600,
-                                    color: '#2563eb',
-                                    background: '#eff6ff',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                <option value="CIE1">CIE-1</option>
-                                <option value="CIE2">CIE-2</option>
-                                <option value="CIE3">CIE-3 (Skill Test-1)</option>
-                                <option value="CIE4">CIE-4 (Skill Test-2)</option>
-                                <option value="CIE5">CIE-5 (Activity)</option>
-                            </select>
-                        </div>
-                        {groupedSubjects.length > 0 ? (
-                            <table className={styles.table} style={{ border: '1px solid #e2e8f0', minWidth: 0, tableLayout: 'auto' }}>
+                        <h4 style={{ marginBottom: '1rem', color: '#334155' }}>CIE Marks Overview</h4>
+                        {studentMarksProfile.length > 0 ? (
+                            <table className={styles.table} style={{ border: '1px solid #e2e8f0' }}>
                                 <thead style={{ background: '#f8fafc' }}>
                                     <tr>
                                         <th>Subject</th>
-                                        <th style={{ textAlign: 'center' }}>Marks (50)</th>
-                                        <th style={{ textAlign: 'center' }}>Attendance</th>
+                                        <th>CIE Type</th>
+                                        <th>Marks Obtained</th>
+                                        <th>Max Marks</th>
+
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {groupedSubjects.map((sub, idx) => {
-                                        const cieData = sub.cies[selectedProfileCIE];
-                                        const marks = cieData?.marks;
-                                        const att = cieData?.attendance;
-                                        return (
-                                            <tr key={idx}>
-                                                <td>
-                                                    <div style={{ fontWeight: 500 }}>{sub.name}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{sub.code}</div>
-                                                </td>
-                                                <td style={{ textAlign: 'center', fontWeight: 600, color: marks != null ? (marks >= 25 ? '#16a34a' : marks >= 15 ? '#d97706' : '#dc2626') : '#94a3b8' }}>
-                                                    {marks != null ? marks : '-'}
-                                                </td>
-                                                <td style={{ textAlign: 'center', fontWeight: 600, color: att != null ? (att >= 75 ? '#059669' : att >= 50 ? '#d97706' : '#dc2626') : '#94a3b8' }}>
-                                                    {att != null ? `${Math.round(att)}%` : '-'}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                    {studentMarksProfile.map((mark, idx) => (
+                                        <tr key={idx}>
+                                            <td>
+                                                <div style={{ fontWeight: 500 }}>{mark.subjectName}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{mark.subjectCode}</div>
+                                            </td>
+                                            <td><span className={styles.statusBadge} style={{ background: '#e0f2fe', color: '#0369a1' }}>{mark.cieType}</span></td>
+                                            <td style={{ fontWeight: 600 }}>{mark.marks}</td>
+                                            <td style={{ color: '#64748b' }}>{mark.maxMarks}</td>
+
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         ) : (
@@ -1877,261 +1682,34 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             {activeTab === 'all-students' && renderAllStudents()}
             {activeTab === 'student-mgmt' && renderStudentManagement()}
             {activeTab === 'overview' && (<div className={styles.overviewContainer}><div className={styles.statsRow}><div className={styles.statCard} onClick={() => setActiveTab('all-students')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.blue}`}><Users size={24} /></div><div className={styles.statInfo}><p>Total Students</p><h3>{deptStudents.length || 0}</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('faculty')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.green}`}><Briefcase size={24} /></div><div className={styles.statInfo}><p>Faculty Members</p><h3>{facultyList.length || 0}</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('performance')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.purple}`}><FileText size={24} /></div><div className={styles.statInfo}><p>Dept. Average</p><h3>{analytics ? analytics.average : '-'}/50</h3></div></div><div className={styles.statCard} onClick={() => setActiveTab('performance')} style={{ cursor: 'pointer' }}><div className={`${styles.iconBox} ${styles.orange}`}><Activity size={24} /></div><div className={styles.statInfo}><p>Pass Percentage</p><h3>{analytics ? analytics.passPercentage : '-'}%</h3></div></div></div><div className={styles.gridTwoOne}><div className={styles.leftColumn}><div className={styles.card} style={{ marginBottom: '1.5rem' }}><div className={styles.cardHeader}><h3>Department Performance (Avg IA Score)</h3></div><div className={styles.circlesContainer}><div className={styles.circlesContainer}>{analytics ? [{ label: 'Avg Percentage', value: Math.round(((analytics.average || 0) / 50) * 100) }, { label: 'Pass Rate', value: analytics.passPercentage || 0 }, { label: 'Risk Factor', value: (analytics.totalStudents || deptStudents.length) > 0 ? Math.round(((analytics.atRiskCount || 0) / (analytics.totalStudents || deptStudents.length)) * 100) : 0 }].map((metric, index) => { const data = { labels: ['Metric', 'Remaining'], datasets: [{ data: [metric.value, 100 - metric.value], backgroundColor: ['#8b5cf6', '#f3f4f6'], borderWidth: 0, cutout: '70%' }] }; return (<div key={index} className={styles.circleItem}><div style={{ height: '120px', width: '120px', position: 'relative' }}><Doughnut data={data} options={{ ...doughnutOptions, plugins: { legend: { display: false }, tooltip: { enabled: false } } }} /><div className={styles.circleLabel}><span className={styles.circleValue}>{metric.value}%</span></div></div><p className={styles.circleName}>{metric.label}</p></div>); }) : <p style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Loading Analytics...</p>}</div></div></div></div><div className={styles.rightColumn}><div className={styles.card}><div className={styles.cardHeader}><h3>Recent Alerts</h3>{departmentAlerts.length > 3 && (<button className={styles.secondaryBtn} style={{ fontSize: '0.8rem', padding: '4px 8px' }} onClick={() => setShowAllAlerts(!showAllAlerts)}>{showAllAlerts ? 'Show Less' : 'View All'}</button>)}</div><div className={styles.alertList}>{(showAllAlerts ? departmentAlerts : departmentAlerts.slice(0, 3)).map(alert => (<div key={alert.id} className={`${styles.alertItem} ${styles[alert.type]}`}><AlertTriangle size={16} /><div><p>{alert.message}</p><span>{alert.date}</span></div></div>))}</div></div></div></div></div>)}
-            {activeTab === 'update-marks' && (
-                <div className={styles.updateMarksContainer}>
-                    <div className={styles.card}>
-                        <div className={styles.cardHeader}>
-                            <h3>Modify Student Marks</h3>
-                        </div>
+            {activeTab === 'update-marks' && (<div className={styles.updateMarksContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Modify Student Marks</h3><div className={styles.filterGroup}>
+                <select className={styles.deptSelect} value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)} style={{ marginRight: '10px' }}>
+                    <option value="all">All Semesters</option>
+                    {[1, 2, 3, 4, 5, 6].map(sem => (
+                        <option key={sem} value={sem}>{sem}{sem === 1 ? 'st' : sem === 2 ? 'nd' : sem === 3 ? 'rd' : 'th'} Semester</option>
+                    ))}
+                </select>
+                <select className={styles.deptSelect} value={selectedSubject?.id || ''} onChange={(e) => { const sub = subjects.find(s => s.id === parseInt(e.target.value)); setSelectedSubject(sub); }}>
+                    {subjects.filter(sub => {
+                        // Filter out IC
+                        if (sub.name === 'IC') return false;
 
-                        <div className={styles.filterGrid}>
-                            <div className={styles.inputGroup}>
-                                <label>Select Semester <span className={styles.required}>*</span></label>
-                                <select className={styles.modernSelect} value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)}>
-                                    {[1, 2, 3, 4, 5, 6].map(sem => (
-                                        <option key={sem} value={sem}>Semester {sem}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Select Internals <span className={styles.required}>*</span></label>
-                                <select className={styles.modernSelect} value={selectedInternal} onChange={(e) => setSelectedInternal(e.target.value)}>
-                                    {[
-                                        { val: 'CIE1', lab: 'CIE-1' },
-                                        { val: 'CIE2', lab: 'CIE-2' },
-                                        { val: 'CIE3', lab: 'CIE-3/SKILL TEST-1' },
-                                        { val: 'CIE4', lab: 'CIE-4/SKILL TEST-2' },
-                                        { val: 'CIE5', lab: 'CIE-5/ACTIVITY' },
-                                        { val: 'All', lab: 'All Internals' }
-                                    ].map(item => (
-                                        <option key={item.val} value={item.val}>{item.lab}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className={styles.inputGroup}>
-                                <label>Select Section <span className={styles.required}>*</span></label>
-                                <select className={styles.modernSelect} value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)}>
-                                    <option value="A">Section A</option>
-                                    <option value="B">Section B</option>
-                                </select>
-                            </div>
-
-                            {selectedInternal === 'All' && (
-                                <div className={styles.inputGroup}>
-                                    <label>Select Subject</label>
-                                    <select className={styles.modernSelect} value={selectedSubjectFilter} onChange={(e) => setSelectedSubjectFilter(e.target.value)}>
-                                        <option value="all">All Subjects</option>
-                                        {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).map(sub => (
-                                            <option key={sub.id} value={String(sub.id)}>{sub.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div className={styles.actionGroup} style={{ display: 'flex', gap: '0.75rem' }}>
-                                <button className={styles.saveBtn} onClick={saveMarks} disabled={selectedSemester === 'all'}>
-                                    <Save size={16} /> Save Changes
-                                </button>
-                                <button
-                                    className={styles.saveBtn}
-                                    onClick={downloadMarksCSV}
-                                    disabled={selectedSemester === 'all'}
-                                    style={{ background: 'linear-gradient(135deg, #059669, #10b981)' }}
-                                >
-                                    <Download size={16} /> Download CSV
-                                </button>
-                            </div>
-                        </div>
-
-                        {selectedSemester !== 'all' && !marksLoaded && (
-                            <div style={{ margin: '1rem', padding: '0.75rem', background: '#fff7ed', color: '#c2410c', borderRadius: '8px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <AlertTriangle size={18} />
-                                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>
-                                    Notice: Marks for {selectedInternal === 'All' ? 'any Internal' : selectedInternal} have not been uploaded for {selectedSemester}{selectedSemester == 1 ? 'st' : selectedSemester == 2 ? 'nd' : selectedSemester == 3 ? 'rd' : 'th'} semester yet.
-                                </span>
-                            </div>
-                        )}
-
-                        <p className={styles.helperText}>
-                            {selectedSemester === 'all'
-                                ? 'Please select a semester to start entering marks.'
-                                : `Entering marks for ${selectedInternal === 'All' ? 'All Internals' : selectedInternal} - ${selectedSemester}${selectedSemester == 1 ? 'st' : selectedSemester == 2 ? 'nd' : selectedSemester == 3 ? 'rd' : 'th'} Semester, Section ${selectedSection}.`}
-                        </p>
-
-                        <div className={styles.tableWrapper}>
-                            <table className={`${styles.table} ${selectedInternal === 'All' && selectedSubjectFilter === 'all' ? styles.wideTable : ''}`}>
-                                <colgroup>
-                                    <col style={{ width: '50px' }} />
-                                    <col style={{ width: '120px' }} />
-                                    <col style={{ width: '200px' }} />
-                                    {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => [
-                                        ...Array.from({ length: selectedInternal === 'All' ? 5 : 1 }).map((_, i) => (
-                                            <col key={`${sub.id}-${i}`} style={selectedInternal === 'All' ? { width: selectedSubjectFilter !== 'all' ? 'auto' : '90px' } : { width: '55px' }} />
-                                        )),
-                                        <col key={`${sub.id}-att`} style={{ width: '55px' }} />
-                                    ])}
-                                </colgroup>
-                                <thead>
-                                    <tr>
-                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={styles.idHeader}>
-                                            <div className={styles.subjectHeaderContent}>
-                                                <Hash size={14} className={styles.subjectIcon} />
-                                                <span>Sl. No.</span>
-                                            </div>
-                                        </th>
-                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={styles.idHeader}>
-                                            <div className={styles.subjectHeaderContent}>
-                                                <Fingerprint size={14} className={styles.subjectIcon} />
-                                                <span>Reg No</span>
-                                            </div>
-                                        </th>
-                                        <th rowSpan={selectedInternal === 'All' ? 2 : 1} className={`${styles.idHeader} ${styles.nameHeader}`}>
-                                            <div className={styles.subjectHeaderContent}>
-                                                <Users size={14} className={styles.subjectIcon} />
-                                                <span>Student Name</span>
-                                            </div>
-                                        </th>
-                                        {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => (
-                                            <th key={sub.id} colSpan={selectedInternal === 'All' ? 6 : 2} className={styles.subjectHeader}>
-                                                <div className={styles.subjectHeaderContent}>
-                                                    <BookOpen size={14} className={styles.subjectIcon} />
-                                                    <span>{sub.name}</span>
-                                                </div>
-                                            </th>
-                                        ))}
-                                    </tr>
-                                    {selectedInternal === 'All' ? (
-                                        <tr>
-                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).map(sub => {
-                                                const singleSubStyle = selectedSubjectFilter !== 'all' ? { textAlign: 'center', fontSize: '0.85rem', fontWeight: 500, padding: '8px 10px' } : {};
-                                                return (
-                                                    <React.Fragment key={sub.id}>
-                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-1</th>
-                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-2</th>
-                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-3<br />SKILL TEST-1</th>
-                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-4<br />SKILL TEST-2</th>
-                                                        <th className={styles.cieSubHeader} style={singleSubStyle}>CIE-5/ACTIVITY</th>
-                                                        <th className={styles.cieSubHeader} style={{ ...singleSubStyle, background: '#ecfdf5', color: '#059669', fontWeight: 600 }}>Att %</th>
-                                                    </React.Fragment>
-                                                );
-                                            })}
-                                        </tr>
-                                    ) : (
-                                        <tr>
-                                            <th colSpan={3}></th>
-                                            {subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter).flatMap(sub => [
-                                                <th key={sub.id} className={styles.cieSubHeader}>
-                                                    {selectedInternal === 'CIE1' ? 'CIE1' :
-                                                        selectedInternal === 'CIE2' ? 'CIE2' :
-                                                            selectedInternal === 'CIE3' ? <>CIE-3<br />SKILL TEST-1</> :
-                                                                selectedInternal === 'CIE4' ? <>CIE-4<br />SKILL TEST-2</> :
-                                                                    selectedInternal === 'CIE5' ? 'ACTIVITY' :
-                                                                        selectedInternal} (50)
-                                                </th>,
-                                                <th key={`${sub.id}-att`} className={styles.cieSubHeader} style={{ background: '#ecfdf5', color: '#059669', fontWeight: 600 }}>Att %</th>
-                                            ])}
-                                        </tr>
-                                    )}
-                                </thead>
-                                <tbody>
-                                    {selectedSemester !== 'all' ? students.filter(s => String(s.semester) === String(selectedSemester) && s.section === selectedSection).map((student, index) => {
-                                        const semSubjects = subjects.filter(sub => String(sub.semester) === String(selectedSemester)).filter(sub => selectedInternal !== 'All' || selectedSubjectFilter === 'all' || String(sub.id) === selectedSubjectFilter);
-                                        return (
-                                            <tr key={student.id}>
-                                                <td className={styles.slNoCell}>{index + 1}</td>
-                                                <td className={styles.regNoCell}>{student.regNo}</td>
-                                                <td className={styles.studentNameCell}>
-                                                    <div className={styles.studentInfoWrapper}>
-                                                        <User size={14} className={styles.userIcon} />
-                                                        <span>{student.name}</span>
-                                                    </div>
-                                                </td>
-                                                {semSubjects.map(sub => {
-                                                    const attData = editingMarks[student.id]?.[sub.id]?._att || {};
-                                                    if (selectedInternal === 'All') {
-                                                        // Average attendance across all CIEs that have attendance data
-                                                        const attVals = Object.values(attData).filter(v => v != null);
-                                                        const avgAtt = attVals.length > 0 ? Math.round(attVals.reduce((a, b) => a + b, 0) / attVals.length) : null;
-                                                        return (
-                                                            <React.Fragment key={sub.id}>
-                                                                {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
-                                                                    <td key={cie} style={selectedSubjectFilter !== 'all' ? { textAlign: 'center' } : {}}>
-                                                                        <input
-                                                                            type="number"
-                                                                            className={styles.markInput}
-                                                                            value={editingMarks[student.id]?.[sub.id]?.[cie] ?? ''}
-                                                                            max={50}
-                                                                            style={selectedSubjectFilter !== 'all' ? { width: '60px', padding: '6px', fontSize: '0.9rem', textAlign: 'center' } : { width: '45px', padding: '4px' }}
-                                                                            onChange={(e) => handleMarkChange(student.id, sub.id, cie, e.target.value)}
-                                                                        />
-                                                                    </td>
-                                                                ))}
-                                                                <td style={{ textAlign: 'center' }}>
-                                                                    {avgAtt != null ? (
-                                                                        <span style={{ fontWeight: 600, color: avgAtt >= 75 ? '#059669' : avgAtt >= 50 ? '#d97706' : '#dc2626', fontSize: '0.85rem' }}>{avgAtt}%</span>
-                                                                    ) : '-'}
-                                                                </td>
-                                                            </React.Fragment>
-                                                        );
-                                                    } else {
-                                                        const cieAtt = attData[selectedInternal];
-                                                        return (
-                                                            <React.Fragment key={sub.id}>
-                                                                <td style={{ paddingRight: 0 }}>
-                                                                    <input
-                                                                        type="number"
-                                                                        className={styles.markInput}
-                                                                        value={editingMarks[student.id]?.[sub.id]?.[selectedInternal] ?? ''}
-                                                                        max={50}
-                                                                        onChange={(e) => handleMarkChange(student.id, sub.id, selectedInternal, e.target.value)}
-                                                                    />
-                                                                </td>
-                                                                <td style={{ textAlign: 'center', paddingLeft: 0 }}>
-                                                                    <input
-                                                                        type="number"
-                                                                        className={styles.markInput}
-                                                                        value={cieAtt ?? ''}
-                                                                        min={0}
-                                                                        max={100}
-                                                                        style={{ width: '55px', padding: '4px', textAlign: 'center', color: cieAtt != null && cieAtt !== '' ? (cieAtt >= 75 ? '#059669' : cieAtt >= 50 ? '#d97706' : '#dc2626') : undefined }}
-                                                                        onChange={(e) => handleAttendanceChange(student.id, sub.id, selectedInternal, e.target.value)}
-                                                                    />
-                                                                </td>
-                                                            </React.Fragment>
-                                                        );
-                                                    }
-                                                })}
-                                            </tr>
-                                        );
-                                    }) : (
-                                        <tr>
-                                            <td colSpan="30" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
-                                                Select a semester to view student list
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        // Check if subject is assigned to any faculty
+                        const isAssigned = facultyList.some(fac => parseSubjects(fac.subjects).includes(sub.name));
+                        // Also include if it's currently selected (to avoid it disappearing)
+                        return isAssigned || (selectedSubject && selectedSubject.id === sub.id);
+                    }).map(sub => (<option key={sub.id} value={sub.id}>{sub.name}</option>))}
+                </select><button className={styles.saveBtn} onClick={saveMarks}><Save size={16} /> Save Changes</button></div></div><p className={styles.helperText}>Edit marks directly in the table. Changes are tracked locally until saved. Max Marks: CIE-1 to CIE-5 (50 each) - Total (250)</p><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Sl. No.</th><th>Reg No</th><th>Student Name</th><th>Sem/Sec</th><th>CIE-1 (50)</th><th>Att %</th><th>CIE-2 (50)</th><th>CIE-3 (50)</th><th>CIE-4 (50)</th><th>CIE-5 (50)</th><th>Total (250)</th></tr></thead><tbody>{students.filter(s => selectedSemester === 'all' || s.semester == selectedSemester).map((student, index) => { const editMark = editingMarks[student.id] || {}; const valCIE1 = (editMark.cie1 !== undefined && editMark.cie1 !== null) ? editMark.cie1 : ''; const valCIE2 = (editMark.cie2 !== undefined && editMark.cie2 !== null) ? editMark.cie2 : ''; const valCIE3 = (editMark.cie3 !== undefined && editMark.cie3 !== null) ? editMark.cie3 : ''; const valCIE4 = (editMark.cie4 !== undefined && editMark.cie4 !== null) ? editMark.cie4 : ''; const valCIE5 = (editMark.cie5 !== undefined && editMark.cie5 !== null) ? editMark.cie5 : ''; const attVal = (editMark.attendance !== undefined && editMark.attendance !== null) ? editMark.attendance : '-'; const total = (Number(valCIE1) || 0) + (Number(valCIE2) || 0) + (Number(valCIE3) || 0) + (Number(valCIE4) || 0) + (Number(valCIE5) || 0); return (<tr key={student.id}><td>{index + 1}</td><td>{student.regNo}</td><td>{student.name}</td><td>{student.semester} - {student.section}</td><td><input type="number" className={styles.markInput} value={valCIE1} max={50} onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)} /></td><td style={{ color: '#6b7280', fontWeight: 500 }}>{attVal !== '-' ? `${attVal}%` : '-'}</td><td><input type="number" className={styles.markInput} value={valCIE2} max={50} onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE3} max={50} onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE4} max={50} onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)} /></td><td><input type="number" className={styles.markInput} value={valCIE5} max={50} onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)} /></td><td style={{ fontWeight: 'bold' }}>{Math.min(total, 250)}</td></tr>); })}</tbody></table></div></div></div>)}
             {activeTab === 'monitoring' && (
                 <div className={styles.monitoringContainer}>
                     <div className={styles.card}>
                         <div className={styles.cardHeader}>
-                            <h3>Subject-wise CIE Submission Status</h3>
+                            <h3>Subject-wise IA Submission Status</h3>
                             <div className={styles.filterGroup}>
                                 <select className={styles.deptSelect} style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
                                     <option>All Semesters</option>
-                                    <option>1st Semester</option>
                                     <option>2nd Semester</option>
-                                    <option>3rd Semester</option>
                                     <option>4th Semester</option>
-                                    <option>5th Semester</option>
-                                    <option>6th Semester</option>
                                 </select>
                             </div>
                         </div>
@@ -2145,7 +1723,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {subjects.map((subject, idx) => {
+                                {subjects.filter(sub => sub.name !== 'IC').map((subject, idx) => {
                                     const subjectMarks = subjectMarksData[subject.name] || [];
                                     const totalStudents = deptStudents.length;
                                     const studentsWithMarks = subjectMarks.filter(mark => mark.cie1Score !== null || mark.cie2Score !== null || mark.cie3Score !== null).length;
@@ -2201,7 +1779,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                 <div className={styles.modalBody}>
                                     <p style={{ marginBottom: '1.5rem', color: '#6b7280' }}>
                                         Status: <span className={`${styles.statusBadge} ${viewingSubject.status === 'Approved' ? styles.approved : viewingSubject.status === 'Submitted' ? styles.submitted : styles.pending}`} style={{ marginLeft: '10px' }}>{viewingSubject.status}</span>
-                                    </p><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Sl. No.</th><th>Reg No</th><th>Student Name</th><th>CIE-1</th><th>CIE-2</th><th>CIE-3</th><th>CIE-4</th><th>CIE-5</th><th>Total</th></tr></thead><tbody>{(() => { const subjectMarks = subjectMarksData[viewingSubject.name] || []; const studentsToShow = viewingSubject.status === 'Pending' ? deptStudents.filter(student => { const studentMark = subjectMarks.find(m => m.student?.regNo === student.regNo); return !studentMark || (studentMark.cie1Score === null && studentMark.cie2Score === null && studentMark.cie3Score === null); }) : deptStudents; return studentsToShow.map((student, index) => { const studentMark = subjectMarks.find(m => m.student?.regNo === student.regNo); const cie1 = studentMark?.cie1Score ?? '-'; const cie2 = studentMark?.cie2Score ?? '-'; const cie3 = studentMark?.cie3Score ?? '-'; const cie4 = studentMark?.cie4Score ?? '-'; const cie5 = studentMark?.cie5Score ?? '-'; const total = (studentMark?.cie1Score || 0) + (studentMark?.cie2Score || 0) + (studentMark?.cie3Score || 0) + (studentMark?.cie4Score || 0) + (studentMark?.cie5Score || 0); return (<tr key={student.id}><td>{index + 1}</td><td>{student.regNo}</td><td>{student.name}</td><td>{cie1}</td><td>{cie2}</td><td>{cie3}</td><td>{cie4}</td><td>{cie5}</td><td style={{ fontWeight: 'bold' }}>{studentMark ? total : '-'}</td></tr>); }); })()}</tbody></table></div></div></div></div>)}</div>)}
+                                    </p><div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Sl. No.</th><th>Reg No</th><th>Student Name</th><th>CIE-1</th><th>Att %</th><th>CIE-2</th><th>CIE-3</th><th>CIE-4</th><th>CIE-5</th><th>Total</th></tr></thead><tbody>{(() => { const subjectMarks = subjectMarksData[viewingSubject.name] || []; const studentsToShow = viewingSubject.status === 'Pending' ? deptStudents.filter(student => { const studentMark = subjectMarks.find(m => m.student?.regNo === student.regNo); return !studentMark || (studentMark.cie1Score === null && studentMark.cie2Score === null && studentMark.cie3Score === null); }) : deptStudents; return studentsToShow.map((student, index) => { const studentMark = subjectMarks.find(m => m.student?.regNo === student.regNo); const cie1 = studentMark?.cie1Score ?? '-'; const cie2 = studentMark?.cie2Score ?? '-'; const cie3 = studentMark?.cie3Score ?? '-'; const cie4 = studentMark?.cie4Score ?? '-'; const cie5 = studentMark?.cie5Score ?? '-'; const att = studentMark?.attendancePercentage ?? '-'; const total = (studentMark?.cie1Score || 0) + (studentMark?.cie2Score || 0) + (studentMark?.cie3Score || 0) + (studentMark?.cie4Score || 0) + (studentMark?.cie5Score || 0); return (<tr key={student.id}><td>{index + 1}</td><td>{student.regNo}</td><td>{student.name}</td><td>{cie1}</td><td>{att !== '-' ? `${att}%` : '-'}</td><td>{cie2}</td><td>{cie3}</td><td>{cie4}</td><td>{cie5}</td><td style={{ fontWeight: 'bold' }}>{studentMark ? total : '-'}</td></tr>); }); })()}</tbody></table></div></div></div></div>)}</div>)}
             {activeTab === 'performance' && (<div className={styles.performanceContainer}><div className={styles.statsRow}><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.blue}`}><Users size={24} /></div><div className={styles.statInfo}><p>Total Students</p><h3>{deptStudents.length || 0}</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.green}`}><TrendingUp size={24} /></div><div className={styles.statInfo}><p>Class Average</p><h3>{analytics?.average || 0}/50</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.purple}`}><Award size={24} /></div><div className={styles.statInfo}><p>Pass Rate</p><h3>{analytics?.passPercentage || 0}%</h3></div></div><div className={styles.statCard}><div className={`${styles.iconBox} ${styles.orange}`}><AlertTriangle size={24} /></div><div className={styles.statInfo}><p>At Risk</p><h3>{analytics?.atRiskCount || 0}</h3></div></div></div><div className={styles.gridTwo}><div className={styles.card}><div className={styles.cardHeader}><h3>CIE Performance Trend</h3><select className={styles.deptSelect} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }} value={performanceSubjectId} onChange={(e) => setPerformanceSubjectId(e.target.value)}><option value="all">All Subjects</option>{subjects.filter(s => s.name !== 'IC').map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></div><div className={styles.chartContainer}><Bar data={{ labels: ['CIE-1', 'CIE-2', 'CIE-3', 'CIE-4', 'CIE-5'], datasets: [{ label: 'Class Average', data: cieTrendData, backgroundColor: ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'], borderRadius: 8 }] }} options={{ ...commonOptions, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 50 } } }} /></div></div><div className={styles.card}><div className={styles.cardHeader}><h3>Grade Distribution</h3></div><div className={styles.doughnutContainer}><Doughnut data={hodGradeDistribution} options={doughnutOptions} /></div></div></div><div className={styles.card} style={{ marginTop: '1.5rem' }}><div className={styles.cardHeader}><h3>Subject-wise Performance</h3></div><table className={styles.table}><thead><tr><th>Subject</th><th>CIE-1 Avg</th><th>CIE-2 Avg</th><th>CIE-3 Avg</th><th>CIE-4 Avg</th><th>CIE-5 Avg</th><th>Overall</th><th>Pass %</th></tr></thead><tbody>{allSubjectPerformance.map((item) => (<tr key={item.id}><td style={{ fontWeight: 600 }}>{item.name}</td>{['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map((cieType) => { const avg = item.averages[cieType] || 0; return (<td key={cieType}><span style={{ color: avg >= 40 ? '#16a34a' : avg >= 30 ? '#ca8a04' : '#dc2626', fontWeight: 500 }}>{avg}/50</span></td>); })}<td style={{ fontWeight: 700 }}>{item.overall}/50</td><td><span className={`${styles.statusBadge} ${item.passRate >= 80 ? styles.approved : item.passRate >= 60 ? styles.submitted : styles.pending}`}>{item.passRate}%</span></td></tr>))}</tbody></table></div><div className={styles.card} style={{ marginTop: '1.5rem' }}><div className={styles.cardHeader}><h3 style={{ color: '#dc2626' }}>⚠️ At-Risk Students (Action Required)</h3><button className={styles.secondaryBtn} style={{ fontSize: '0.85rem' }}><Download size={14} /> Export List</button></div><table className={styles.table}><thead><tr><th>Reg No</th><th>Student Name</th><th>CIE Average</th><th>Issue</th><th>Action</th></tr></thead><tbody>{atRiskStudents.map((student) => (<tr key={student.id}><td>{student.rollNo}</td><td style={{ fontWeight: 500 }}>{student.name}</td><td><span style={{ color: student.avgMarks < 20 ? '#dc2626' : '#ca8a04', fontWeight: 600 }}>{student.avgMarks}/50</span></td><td><span className={styles.issueTag}>{student.issue}</span></td><td><div style={{ display: 'flex', gap: '0.5rem' }}><button className={styles.secondaryBtn} style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => alert(`Sending notification to ${student.name}`)}>Notify</button><button className={styles.secondaryBtn} style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }} onClick={() => alert(`Scheduling meeting with ${student.name}`)}>Meet</button></div></td></tr>))}</tbody></table></div></div>)}
             {activeTab === 'faculty' && (<div className={styles.facultyContainer}><div className={styles.card}><div className={styles.cardHeader}><h3>Department Faculty ({facultyList.length})</h3><div style={{ display: 'flex', gap: '1rem', position: 'relative' }}><button className={styles.primaryBtn} onClick={() => { setEditingFaculty(null); setFacultyForm({ fullName: '', username: '', email: '', password: 'password123', designation: 'Assistant Professor', subjects: '' }); setShowAddFacultyModal(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Users size={16} /> Add New Faculty</button><div style={{ position: 'relative' }}><button className={styles.secondaryBtn} onClick={() => setShowEditSelection(!showEditSelection)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}><Edit size={16} /> Edit Faculty</button>{showEditSelection && (<div style={{ position: 'absolute', top: '110%', right: 0, width: '250px', background: 'white', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', zIndex: 100, padding: '0.5rem' }}><p style={{ padding: '0.5rem', fontSize: '0.85rem', color: '#64748b', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>Select Faculty to Edit:</p><div style={{ maxHeight: '300px', overflowY: 'auto' }}>{facultyList.map(fac => (<button key={fac.id} onClick={() => { handleEditFaculty(fac); setShowEditSelection(false); }} style={{ width: '100%', textAlign: 'left', padding: '0.75rem', borderRadius: '6px', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '2px', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'none'}><span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>{fac.fullName || fac.username}</span><small style={{ color: '#64748b' }}>{fac.designation || 'Faculty'}</small></button>))}</div></div>)}</div></div></div><div className={styles.facultyList} style={{ marginTop: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.5rem' }}>{facultyList.length > 0 ? facultyList.map(fac => (<div key={fac.id} className={styles.facultyItem} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem', background: 'white', display: 'flex', flexDirection: 'column' }}><div className={styles.facProfile} style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}><div className={styles.avatarSm} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem' }}>{fac.fullName ? fac.fullName.charAt(0) : fac.username.charAt(0)}</div><div style={{ flex: 1 }}><p className={styles.facName} style={{ fontWeight: 600, fontSize: '1.1rem', color: '#1e293b', margin: 0 }}>{fac.fullName || fac.username}</p><small className={styles.facStatus} style={{ color: '#64748b' }}>{fac.designation || 'Faculty Member'}</small>{(fac.semester || fac.section) && (<small style={{ color: '#2563eb', fontWeight: 500, fontSize: '0.8rem', marginTop: '2px', display: 'block' }}>Class Teacher: {fac.semester ? `${fac.semester} Sem` : ''} {fac.section ? `- Sec ${fac.section}` : ''}</small>)}</div></div><div style={{ marginBottom: '1rem', flex: 1 }}><span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Subjects ({parseSubjects(fac.subjects).length})</span><div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>{parseSubjects(fac.subjects).length > 0 ? parseSubjects(fac.subjects).map((sub, i) => (<span key={i} style={{ fontSize: '0.8rem', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', color: '#475569' }}>{sub}</span>)) : (<span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>No active subjects assigned</span>)}</div></div><div className={styles.facActions} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}><button className={styles.viewBtn} style={{ gridColumn: 'span 2' }} onClick={() => handleViewDashboard(fac)}><LayoutDashboard size={16} /> View Dashboard</button><button className={styles.msgBtn} onClick={() => handleMessage(fac)}><Mail size={16} /> Message</button><button className={styles.secondaryBtn} onClick={() => handleEditFaculty(fac)} style={{ border: '1px solid #e2e8f0', background: 'white', color: '#475569' }}><Edit size={16} /> Edit</button><button className={styles.secondaryBtn} onClick={() => openResetPasswordModal(fac.username, fac.fullName || fac.username, 'FACULTY')} style={{ border: '1px solid #fde68a', background: '#fef3c7', color: '#d97706' }}><Key size={14} /> Reset</button><button className={styles.secondaryBtn} onClick={() => handleDeleteFaculty(fac.id)} style={{ border: '1px solid #fee2e2', background: '#fef2f2', color: '#dc2626' }}><Trash2 size={16} /> Remove</button></div></div>)) : (<div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '3rem', color: '#64748b' }}><Users size={48} style={{ marginBottom: '1rem', color: '#cbd5e1' }} /><p>No faculty members found for this department.</p></div>)}</div></div>{showAddFacultyModal && (<div className={styles.modalOverlay}><div className={styles.modalContent} style={{ maxWidth: '500px' }}><div className={styles.modalHeader}><h3>{editingFaculty ? 'Edit Faculty' : 'Add New Faculty'}</h3><button className={styles.closeBtn} onClick={() => setShowAddFacultyModal(false)}><X size={24} /></button></div><div className={styles.modalBody}><form onSubmit={handleAddFaculty} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}><div className={styles.formGroup}><label>Full Name</label><input value={facultyForm.fullName} onChange={e => setFacultyForm({ ...facultyForm, fullName: e.target.value })} required placeholder="e.g. Dr. John Doe" className={styles.input} /></div><div className={styles.formGroup}><label>Username</label><input value={facultyForm.username} onChange={e => setFacultyForm({ ...facultyForm, username: e.target.value })} required placeholder="jdoe" className={styles.input} />{editingFaculty && <small style={{ color: '#64748b', fontSize: '0.75rem' }}>⚠️ Changing the username will update the faculty's login ID.</small>}</div><div className={styles.formGroup}><label>Email</label><input value={facultyForm.email} onChange={e => setFacultyForm({ ...facultyForm, email: e.target.value })} type="email" required placeholder="john@college.edu" className={styles.input} /></div>{!editingFaculty && (<div className={styles.formGroup}><label>Temporary Password</label><input value={facultyForm.password} onChange={e => setFacultyForm({ ...facultyForm, password: e.target.value })} required placeholder="password123" className={styles.input} /></div>)}<div className={styles.formGroup}><label>Designation</label><select value={facultyForm.designation} onChange={e => setFacultyForm({ ...facultyForm, designation: e.target.value })} className={styles.input}><option>Assistant Professor</option><option>Associate Professor</option><option>Professor</option><option>Guest Faculty</option></select></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}><button type="button" className={styles.secondaryBtn} onClick={() => setShowAddFacultyModal(false)}>Cancel</button><button type="submit" className={styles.primaryBtn} style={{ background: '#2563eb', color: 'white' }}>{editingFaculty ? 'Update Faculty' : 'Create Account'}</button></div></form></div></div></div>)}
                 {viewingFaculty && (<div className={styles.modalOverlay} onClick={() => setViewingFaculty(null)}><div className={styles.modalContent} style={{ maxWidth: '700px' }} onClick={e => e.stopPropagation()}><div className={styles.modalHeader}><div><h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>{viewingFaculty.fullName || viewingFaculty.username}</h2><span className={styles.badge} style={{ position: 'static', padding: '2px 8px', borderRadius: '4px', background: '#eff6ff', color: '#2563eb', fontWeight: 500, fontSize: '0.85rem' }}>Dashboard Overview</span></div><button className={styles.closeBtn} onClick={() => setViewingFaculty(null)}><X size={24} /></button></div><div className={styles.modalBody}>{(() => {

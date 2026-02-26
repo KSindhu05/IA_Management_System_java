@@ -42,10 +42,11 @@ public class SubjectController {
                     .body(Map.of("message", "Subject name, code, and department are required."));
         }
 
-        // Check for duplicate code
-        if (subjectRepository.findByCode(code).isPresent()) {
+        // Check for duplicate code in the same department
+        if (subjectRepository.findByCodeAndDepartment(code, department).isPresent()) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "A subject with code '" + code + "' already exists."));
+                    .body(Map.of("message",
+                            "A subject with code '" + code + "' already exists in the " + department + " department."));
         }
 
         Subject subject = new Subject();
@@ -88,10 +89,13 @@ public class SubjectController {
                         .body(Map.of("message", "Subject name and code are required."));
             }
 
-            // Check if code is being changed and if new code already exists
-            if (!subject.getCode().equals(code) && subjectRepository.findByCode(code).isPresent()) {
+            // Check if code is being changed and if new code already exists in the same
+            // department
+            if (!subject.getCode().equals(code)
+                    && subjectRepository.findByCodeAndDepartment(code, subject.getDepartment()).isPresent()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("message", "A subject with code '" + code + "' already exists."));
+                        .body(Map.of("message", "A subject with code '" + code + "' already exists in the "
+                                + subject.getDepartment() + " department."));
             }
 
             subject.setName(name);

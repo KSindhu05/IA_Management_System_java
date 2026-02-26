@@ -656,6 +656,17 @@
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+/* Hide number input spinner arrows */
+.markInput::-webkit-inner-spin-button,
+.markInput::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.markInput[type="number"] {
+    -moz-appearance: textfield;
+}
+
 .avgCell {
     font-weight: 700;
     color: #111827;

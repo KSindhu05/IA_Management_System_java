@@ -24,9 +24,6 @@ public class CieMark {
     // Total marks (out of 50)
     private Double marks;
 
-    // Attendance percentage (0-100) for this CIE
-    private Double attendance;
-
     // PENDING, SUBMITTED, APPROVED, REJECTED
     @Column(nullable = false)
     private String status = "PENDING";
@@ -79,12 +76,15 @@ public class CieMark {
         this.status = status;
     }
 
-    public Double getAttendance() {
-        return attendance;
+    // Attendance percentage (0-100) entered by faculty
+    private Double attendancePercentage;
+
+    public Double getAttendancePercentage() {
+        return attendancePercentage;
     }
 
-    public void setAttendance(Double attendance) {
-        this.attendance = attendance;
+    public void setAttendancePercentage(Double attendancePercentage) {
+        this.attendancePercentage = attendancePercentage;
     }
 
     // Alias for frontend compatibility: frontend reads "totalScore" not "marks"

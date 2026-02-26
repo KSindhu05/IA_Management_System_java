@@ -107,13 +107,18 @@ const StudentDashboard = () => {
                         if (!mark.subject) return;
                         const subId = mark.subject.id;
                         if (!groupedMarks[subId]) {
-                            groupedMarks[subId] = { subject: mark.subject, cie1Score: null, cie2Score: null, cie3Score: null, cie4Score: null, cie5Score: null, totalScore: 0, count: 0 };
+                            groupedMarks[subId] = { subject: mark.subject, cie1Score: null, cie2Score: null, cie3Score: null, cie4Score: null, cie5Score: null, attendancePercentage: null, totalScore: 0, count: 0 };
                         }
                         if (mark.cieType === 'CIE1') groupedMarks[subId].cie1Score = mark.totalScore;
                         else if (mark.cieType === 'CIE2') groupedMarks[subId].cie2Score = mark.totalScore;
                         else if (mark.cieType === 'CIE3') groupedMarks[subId].cie3Score = mark.totalScore;
                         else if (mark.cieType === 'CIE4') groupedMarks[subId].cie4Score = mark.totalScore;
                         else if (mark.cieType === 'CIE5') groupedMarks[subId].cie5Score = mark.totalScore;
+
+                        // Capture attendance from CIE1 record
+                        if (mark.cieType === 'CIE1' && mark.attendancePercentage != null) {
+                            groupedMarks[subId].attendancePercentage = mark.attendancePercentage;
+                        }
 
 
                         groupedMarks[subId].count++;
@@ -239,7 +244,7 @@ const StudentDashboard = () => {
                     </div>
                     <div className={styles.tableContainer}>
                         <table className={styles.table}>
-                            <thead><tr><th>Subject</th><th>CIE-1</th><th>Total Progress</th><th>Grade</th></tr></thead>
+                            <thead><tr><th>Subject</th><th>CIE-1</th><th>Att %</th><th>Total Progress</th><th>Grade</th></tr></thead>
                             <tbody>
                                 {realSubjects.length > 0 ? realSubjects.map((sub, idx) => {
                                     const mark = realMarks.find(m => m.subject.id === sub.id) || {};
@@ -252,6 +257,7 @@ const StudentDashboard = () => {
                                         <tr key={sub.id} style={{ animation: `fadeIn 0.4s ease-out ${idx * 0.1}s backwards` }}>
                                             <td><div className={styles.subjectCell}><span style={{ fontWeight: 600 }}>{sub.name}</span><br /><span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{sub.code}</span></div></td>
                                             <td>{mark.cie1Score != null ? mark.cie1Score : '-'}</td>
+                                            <td>{mark.attendancePercentage != null ? mark.attendancePercentage + '%' : '-'}</td>
                                             <td style={{ minWidth: '150px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
                                                     <span>{total} / {maxMarks}</span>
@@ -264,7 +270,7 @@ const StudentDashboard = () => {
                                             <td><span className={styles.badge} style={{ color: status.color, background: status.bg }}>{status.label}</span></td>
                                         </tr>
                                     );
-                                }) : <tr><td colSpan="4" style={{ textAlign: 'center', padding: '1rem' }}>Loading real-time data...</td></tr>}
+                                }) : <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1rem' }}>Loading real-time data...</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -343,6 +349,7 @@ const StudentDashboard = () => {
                 cie3: fmt(mark.cie3Score),
                 cie4: fmt(mark.cie4Score),
                 cie5: fmt(mark.cie5Score),
+                attendance: mark.attendancePercentage != null ? mark.attendancePercentage : '-',
                 total
             });
         });
@@ -400,13 +407,14 @@ const StudentDashboard = () => {
                                         {selectedCIE === 'All' && (
                                             <>
                                                 <th>CIE-1</th>
+                                                <th>Att %</th>
                                                 <th>CIE-2</th>
                                                 <th>Skill Test 1</th>
                                                 <th>Skill Test 2</th>
                                                 <th>Activities</th>
                                             </>
                                         )}
-                                        {selectedCIE === 'CIE-1' && <th>CIE-1</th>}
+                                        {selectedCIE === 'CIE-1' && <><th>CIE-1</th><th>Att %</th></>}
                                         {selectedCIE === 'CIE-2' && <th>CIE-2</th>}
                                         {selectedCIE === 'CIE-3' && <th>Skill Test 1</th>}
                                         {selectedCIE === 'CIE-4' && <th>Skill Test 2</th>}
@@ -449,6 +457,7 @@ const StudentDashboard = () => {
                                                 {selectedCIE === 'All' && (
                                                     <>
                                                         <td>{item.cie1 !== '-' ? `${item.cie1} / 50` : '-'}</td>
+                                                        <td>{item.attendance !== '-' ? `${item.attendance}%` : '-'}</td>
                                                         <td>{item.cie2 !== '-' ? `${item.cie2} / 50` : '-'}</td>
                                                         <td>{item.cie3 !== '-' ? `${item.cie3} / 50` : '-'}</td>
                                                         <td>{item.cie4 !== '-' ? `${item.cie4} / 50` : '-'}</td>
@@ -456,7 +465,7 @@ const StudentDashboard = () => {
                                                     </>
                                                 )}
 
-                                                {selectedCIE === 'CIE-1' && <td>{item.cie1 !== '-' ? `${item.cie1} / 50` : '-'}</td>}
+                                                {selectedCIE === 'CIE-1' && <><td>{item.cie1 !== '-' ? `${item.cie1} / 50` : '-'}</td><td>{item.attendance !== '-' ? `${item.attendance}%` : '-'}</td></>}
                                                 {selectedCIE === 'CIE-2' && <td>{item.cie2 !== '-' ? `${item.cie2} / 50` : '-'}</td>}
                                                 {selectedCIE === 'CIE-3' && <td>{item.cie3 !== '-' ? `${item.cie3} / 50` : '-'}</td>}
                                                 {selectedCIE === 'CIE-4' && <td>{item.cie4 !== '-' ? `${item.cie4} / 50` : '-'}</td>}

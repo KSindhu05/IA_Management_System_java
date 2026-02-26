@@ -6,6 +6,7 @@ import com.example.ia.entity.Subject;
 import com.example.ia.entity.User;
 import com.example.ia.payload.response.FacultyClassAnalytics;
 import com.example.ia.repository.FacultyAssignmentRequestRepository;
+import com.example.ia.repository.StudentRepository;
 import com.example.ia.repository.SubjectRepository;
 import com.example.ia.repository.UserRepository;
 import com.example.ia.service.FacultyService;
@@ -16,8 +17,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -33,6 +36,9 @@ public class FacultyController {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    StudentRepository studentRepository;
 
     @Autowired
     FacultyAssignmentRequestRepository assignmentRequestRepository;
@@ -72,14 +78,50 @@ public class FacultyController {
     @GetMapping("/all-departments")
     @PreAuthorize("hasRole('FACULTY')")
     public ResponseEntity<List<String>> getAllDepartments() {
-        List<Subject> allSubjects = subjectRepository.findAll();
-        List<String> departments = allSubjects.stream()
+        Set<String> departments = new HashSet<>();
+
+        // Collect departments from subjects
+        subjectRepository.findAll().stream()
                 .map(Subject::getDepartment)
                 .filter(d -> d != null && !d.isBlank())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(departments);
+                .forEach(departments::add);
+
+        // Collect departments from users (HODs, faculty, students)
+        userRepository.findAll().stream()
+                .map(User::getDepartment)
+                .filter(d -> d != null && !d.isBlank() && !"ADMIN".equalsIgnoreCase(d))
+                .forEach(departments::add);
+
+        // Collect departments from student entities
+        studentRepository.findAll().stream()
+                .map(Student::getDepartment)
+                .filter(d -> d != null && !d.isBlank())
+                .forEach(departments::add);
+
+        // Map of common variations to standardize names
+        Map<String, String> standardNames = Map.of(
+                "CS", "CSE", "COMPUTER SCIENCE", "CSE",
+                "CV", "CIVIL", "CIVIL ENGINEERING", "CIVIL",
+                "ME", "MECH", "MECHANICAL", "MECH",
+                "EE", "EEE", "ELECTRICAL", "EEE");
+
+        // Standardize collected departments
+        Set<String> standardizedDepartments = departments.stream()
+                .map(d -> {
+                    String upper = d.toUpperCase();
+                    return standardNames.getOrDefault(upper, upper);
+                })
+                .collect(Collectors.toSet());
+
+        // Always include basic departments
+        List<String> validDepartments = List.of("CSE", "EEE", "CIVIL", "MECH", "MT");
+
+        // Filter to only include the 5 valid departments
+        standardizedDepartments.retainAll(validDepartments);
+        standardizedDepartments.addAll(validDepartments);
+
+        List<String> sorted = standardizedDepartments.stream().sorted().collect(Collectors.toList());
+        return ResponseEntity.ok(sorted);
     }
 
     /**
@@ -91,6 +133,30 @@ public class FacultyController {
     public ResponseEntity<List<Subject>> getDepartmentSubjects(@RequestParam String department) {
         List<Subject> subjects = subjectRepository.findByDepartment(department);
         return ResponseEntity.ok(subjects);
+    }
+
+    /**
+     * Returns available sections for a given department and semester.
+     */
+    @GetMapping("/available-sections")
+    @PreAuthorize("hasRole('FACULTY')")
+    public ResponseEntity<List<String>> getAvailableSections(
+            @RequestParam String department,
+            @RequestParam Integer semester) {
+        List<String> sections = studentRepository.findDistinctSectionsByDepartmentAndSemester(department, semester);
+
+        // Sort sections alphabetically (e.g., A, B, C)
+        List<String> sortedSections = sections.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .sorted()
+                .collect(Collectors.toList());
+
+        // If no students yet, provide a default fallback
+        if (sortedSections.isEmpty()) {
+            sortedSections = List.of("A");
+        }
+
+        return ResponseEntity.ok(sortedSections);
     }
 
     /**

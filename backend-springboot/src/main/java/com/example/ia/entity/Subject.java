@@ -3,7 +3,7 @@ package com.example.ia.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "subjects")
+@Table(name = "subjects", uniqueConstraints = { @UniqueConstraint(columnNames = { "code", "department" }) })
 public class Subject {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -12,7 +12,7 @@ public class Subject {
     @Column(nullable = false)
     private String name;
 
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false)
     private String code;
 
     private String department;
