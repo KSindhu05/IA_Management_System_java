@@ -55,7 +55,7 @@ public class FacultyService {
 
     // ---------------------------------------------------------------
     // Returns students this faculty is allowed to see.
-    // Home dept: filters by subjects' departments + faculty's sections.
+    // Home dept: uses faculty's own department + sections.
     // Cross-dept: filters by each approved request's dept + its sections.
     // ---------------------------------------------------------------
     public List<Student> getStudentsForFaculty(String username) {
@@ -65,35 +65,20 @@ public class FacultyService {
 
         List<String> homeSections = parseSections(user);
 
-        // Determine home departments from the faculty's assigned subjects
-        Set<String> homeDepartments = new HashSet<>();
-        if (user.getSubjects() != null && !user.getSubjects().isBlank()) {
-            List<String> subjectNames = Arrays.stream(user.getSubjects().split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toList());
-            if (!subjectNames.isEmpty()) {
-                List<Subject> homeSubjects = subjectRepository.findByNameIn(subjectNames);
-                for (Subject sub : homeSubjects) {
-                    if (sub.getDepartment() != null && !sub.getDepartment().isBlank()) {
-                        homeDepartments.add(sub.getDepartment());
-                    }
-                }
-            }
-        }
+        // Use faculty's own department as home department
+        String homeDept = user.getDepartment();
 
         List<Student> result = new ArrayList<>();
         Set<Long> addedIds = new HashSet<>();
 
-        // 1. Home department students — use faculty's own sections
-        if (!homeDepartments.isEmpty()) {
+        // 1. Home department students — use faculty's own department + sections
+        if (homeDept != null && !homeDept.isBlank()) {
             List<Student> homeStudents;
             if (!homeSections.isEmpty()) {
                 homeStudents = studentRepository.findByDepartmentInAndSectionIn(
-                        new ArrayList<>(homeDepartments), new ArrayList<>(homeSections));
+                        List.of(homeDept), new ArrayList<>(homeSections));
             } else {
-                homeStudents = studentRepository.findByDepartmentIn(
-                        new ArrayList<>(homeDepartments));
+                homeStudents = studentRepository.findByDepartment(homeDept);
             }
             for (Student s : homeStudents) {
                 if (addedIds.add(s.getId()))
@@ -142,32 +127,51 @@ public class FacultyService {
         if (user == null)
             return List.of();
 
-        Set<String> subjectNames = new HashSet<>();
+        List<Subject> result = new ArrayList<>();
+        Set<Long> addedIds = new HashSet<>();
 
-        // 1. From user's own subjects field (home department)
-        if (user.getSubjects() != null && !user.getSubjects().isBlank()) {
-            Arrays.stream(user.getSubjects().split(","))
+        // 1. Home department subjects — filter by faculty's own department
+        String homeDept = user.getDepartment();
+        if (user.getSubjects() != null && !user.getSubjects().isBlank() &&
+                homeDept != null && !homeDept.isBlank()) {
+            List<String> homeSubjectNames = Arrays.stream(user.getSubjects().split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
-                    .forEach(subjectNames::add);
-        }
-
-        // 2. From approved cross-department assignments
-        List<FacultyAssignmentRequest> approvedRequests = assignmentRequestRepository
-                .findByFacultyId(user.getId());
-        for (FacultyAssignmentRequest req : approvedRequests) {
-            if ("APPROVED".equals(req.getStatus()) && req.getSubjects() != null) {
-                Arrays.stream(req.getSubjects().split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isEmpty())
-                        .forEach(subjectNames::add);
+                    .collect(Collectors.toList());
+            if (!homeSubjectNames.isEmpty()) {
+                // Only return subjects matching both name AND faculty's department
+                List<Subject> homeSubjects = subjectRepository.findByNameInAndDepartment(
+                        homeSubjectNames, homeDept);
+                for (Subject s : homeSubjects) {
+                    if (addedIds.add(s.getId()))
+                        result.add(s);
+                }
             }
         }
 
-        if (subjectNames.isEmpty())
-            return List.of();
+        // 2. Cross-department subjects — filter by each request's targetDepartment
+        List<FacultyAssignmentRequest> approvedRequests = assignmentRequestRepository
+                .findByFacultyId(user.getId());
+        for (FacultyAssignmentRequest req : approvedRequests) {
+            if (!"APPROVED".equals(req.getStatus()) || req.getSubjects() == null)
+                continue;
 
-        return subjectRepository.findByNameIn(new ArrayList<>(subjectNames));
+            List<String> crossSubjectNames = Arrays.stream(req.getSubjects().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+            if (!crossSubjectNames.isEmpty()) {
+                // Only return subjects matching both name AND the request's target department
+                List<Subject> crossSubjects = subjectRepository.findByNameInAndDepartment(
+                        crossSubjectNames, req.getTargetDepartment());
+                for (Subject s : crossSubjects) {
+                    if (addedIds.add(s.getId()))
+                        result.add(s);
+                }
+            }
+        }
+
+        return result;
     }
 
     public FacultyClassAnalytics getAnalytics(String username) {

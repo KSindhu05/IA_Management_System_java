@@ -268,7 +268,13 @@ public class HodController {
 
     @GetMapping("/faculty")
     @PreAuthorize("hasRole('HOD') or hasRole('PRINCIPAL')")
-    public List<User> getFaculty(@RequestParam String department) {
+    public List<Map<String, Object>> getFaculty(@RequestParam String department) {
+        // Get all subject names belonging to this department
+        List<com.example.ia.entity.Subject> deptSubjects = subjectRepository.findByDepartment(department);
+        Set<String> deptSubjectNames = deptSubjects.stream()
+                .map(com.example.ia.entity.Subject::getName)
+                .collect(Collectors.toSet());
+
         // Get home-department faculty
         List<User> homeFaculty = userRepository.findByRoleAndDepartment("FACULTY", department);
 
@@ -289,7 +295,34 @@ public class HodController {
             }
         }
 
-        return merged;
+        // Filter each faculty's subjects to only include this department's subjects
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (User fac : merged) {
+            Map<String, Object> facMap = new HashMap<>();
+            facMap.put("id", fac.getId());
+            facMap.put("username", fac.getUsername());
+            facMap.put("fullName", fac.getFullName());
+            facMap.put("email", fac.getEmail());
+            facMap.put("department", fac.getDepartment());
+            facMap.put("designation", fac.getDesignation());
+            facMap.put("semester", fac.getSemester());
+            facMap.put("section", fac.getSection());
+            facMap.put("role", fac.getRole());
+
+            // Filter subjects: only keep subjects that belong to this department
+            String filteredSubjects = "";
+            if (fac.getSubjects() != null && !fac.getSubjects().isBlank()) {
+                filteredSubjects = Arrays.stream(fac.getSubjects().split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty() && deptSubjectNames.contains(s))
+                        .collect(Collectors.joining(", "));
+            }
+            facMap.put("subjects", filteredSubjects.isEmpty() ? null : filteredSubjects);
+
+            result.add(facMap);
+        }
+
+        return result;
     }
 
     // ========== CROSS-DEPARTMENT ASSIGNMENT REQUEST MANAGEMENT ==========
@@ -320,59 +353,63 @@ public class HodController {
     @PreAuthorize("hasRole('HOD')")
     @Transactional
     public ResponseEntity<?> approveAssignmentRequest(@PathVariable Long id) {
-        return assignmentRequestRepository.findById(id).map(request -> {
-            if (!"PENDING".equals(request.getStatus())) {
-                return ResponseEntity.badRequest()
-                        .<Object>body(Map.of("message", "Request is already " + request.getStatus()));
-            }
-
-            // Update request status
-            request.setStatus("APPROVED");
-            request.setResponseDate(LocalDateTime.now());
-            assignmentRequestRepository.save(request);
-
-            // Update faculty's subjects field — merge new subjects
-            userRepository.findById(request.getFacultyId()).ifPresent(faculty -> {
-                String existingSubjects = faculty.getSubjects() != null ? faculty.getSubjects() : "";
-                Set<String> subjectSet = new HashSet<>(
-                        Arrays.asList(existingSubjects.split(",")).stream()
-                                .map(String::trim).filter(s -> !s.isEmpty())
-                                .collect(Collectors.toList()));
-
-                // Add newly approved subjects
-                String[] newSubjects = request.getSubjects().split(",");
-                for (String sub : newSubjects) {
-                    subjectSet.add(sub.trim());
+        try {
+            return assignmentRequestRepository.findById(id).map(request -> {
+                if (!"PENDING".equals(request.getStatus())) {
+                    return ResponseEntity.badRequest()
+                            .<Object>body(Map.of("message", "Request is already " + request.getStatus()));
                 }
 
-                faculty.setSubjects(String.join(", ", subjectSet));
+                // Update request status
+                request.setStatus("APPROVED");
+                request.setResponseDate(LocalDateTime.now());
+                assignmentRequestRepository.save(request);
 
-                // Merge sections if provided
-                if (request.getSections() != null && !request.getSections().isBlank()) {
-                    String existingSections = faculty.getSection() != null ? faculty.getSection() : "";
-                    Set<String> sectionSet = new HashSet<>(
-                            Arrays.asList(existingSections.split(",")).stream()
+                // Update faculty's subjects field — merge new subjects
+                userRepository.findById(request.getFacultyId()).ifPresent(faculty -> {
+                    String existingSubjects = faculty.getSubjects() != null ? faculty.getSubjects() : "";
+                    Set<String> subjectSet = new HashSet<>(
+                            Arrays.asList(existingSubjects.split(",")).stream()
                                     .map(String::trim).filter(s -> !s.isEmpty())
                                     .collect(Collectors.toList()));
-                    for (String sec : request.getSections().split(",")) {
-                        sectionSet.add(sec.trim());
+
+                    // Add newly approved subjects
+                    String[] newSubjects = request.getSubjects().split(",");
+                    for (String sub : newSubjects) {
+                        subjectSet.add(sub.trim());
                     }
-                    faculty.setSection(String.join(",", sectionSet));
-                }
 
-                userRepository.save(faculty);
+                    faculty.setSubjects(String.join(", ", subjectSet));
 
-                // Update instructorName in Subject records
-                for (String subName : newSubjects) {
-                    subjectRepository.findByName(subName.trim()).ifPresent(subject -> {
-                        subject.setInstructorName(faculty.getFullName());
-                        subjectRepository.save(subject);
-                    });
-                }
-            });
+                    // Merge sections if provided
+                    if (request.getSections() != null && !request.getSections().isBlank()) {
+                        String existingSections = faculty.getSection() != null ? faculty.getSection() : "";
+                        Set<String> sectionSet = new HashSet<>(
+                                Arrays.asList(existingSections.split(",")).stream()
+                                        .map(String::trim).filter(s -> !s.isEmpty())
+                                        .collect(Collectors.toList()));
+                        for (String sec : request.getSections().split(",")) {
+                            sectionSet.add(sec.trim());
+                        }
+                        faculty.setSection(String.join(",", sectionSet));
+                    }
 
-            return ResponseEntity.ok(Map.of("message", "Assignment request approved successfully"));
-        }).orElse(ResponseEntity.notFound().build());
+                    userRepository.save(faculty);
+
+                    // Update instructorName in Subject records
+                    for (String subName : newSubjects) {
+                        subjectRepository.findFirstByName(subName.trim()).ifPresent(subject -> {
+                            subject.setInstructorName(faculty.getFullName());
+                            subjectRepository.save(subject);
+                        });
+                    }
+                });
+
+                return ResponseEntity.ok(Map.of("message", "Assignment request approved successfully"));
+            }).orElse(ResponseEntity.status(404).<Object>body(Map.of("message", "Assignment request not found")));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("message", "Error approving request: " + e.getMessage()));
+        }
     }
 
     /**
@@ -381,18 +418,22 @@ public class HodController {
     @PutMapping("/assignment-requests/{id}/reject")
     @PreAuthorize("hasRole('HOD')")
     public ResponseEntity<?> rejectAssignmentRequest(@PathVariable Long id) {
-        return assignmentRequestRepository.findById(id).map(request -> {
-            if (!"PENDING".equals(request.getStatus())) {
-                return ResponseEntity.badRequest()
-                        .<Object>body(Map.of("message", "Request is already " + request.getStatus()));
-            }
+        try {
+            return assignmentRequestRepository.findById(id).map(request -> {
+                if (!"PENDING".equals(request.getStatus())) {
+                    return ResponseEntity.badRequest()
+                            .<Object>body(Map.of("message", "Request is already " + request.getStatus()));
+                }
 
-            request.setStatus("REJECTED");
-            request.setResponseDate(LocalDateTime.now());
-            assignmentRequestRepository.save(request);
+                request.setStatus("REJECTED");
+                request.setResponseDate(LocalDateTime.now());
+                assignmentRequestRepository.save(request);
 
-            return ResponseEntity.ok(Map.of("message", "Assignment request rejected"));
-        }).orElse(ResponseEntity.notFound().build());
+                return ResponseEntity.ok(Map.of("message", "Assignment request rejected"));
+            }).orElse(ResponseEntity.status(404).<Object>body(Map.of("message", "Assignment request not found")));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("message", "Error rejecting request: " + e.getMessage()));
+        }
     }
 
     @PostMapping("/faculty")

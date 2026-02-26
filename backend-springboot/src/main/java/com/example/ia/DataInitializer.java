@@ -49,7 +49,7 @@ public class DataInitializer {
             System.out.println("✅ JAVA CLEANUP: Fixed/Deleted " + fixedCount + " zero-value marks.");
 
             // CLEANUP: Remove Advanced Java if it exists
-            subjectRepository.findByName("Advanced Java").ifPresent(subject -> {
+            subjectRepository.findFirstByName("Advanced Java").ifPresent(subject -> {
                 java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository
                         .findBySubject_Id(subject.getId());
                 cieMarkRepository.deleteAll(marks);
@@ -59,7 +59,7 @@ public class DataInitializer {
 
             // CLEANUP: Remove marks for Indian Constitution if they exist (KEEP the
             // subject)
-            subjectRepository.findByName("Indian Constitution").ifPresent(subject -> {
+            subjectRepository.findFirstByName("Indian Constitution").ifPresent(subject -> {
                 java.util.List<com.example.ia.entity.CieMark> marks = cieMarkRepository
                         .findBySubject_Id(subject.getId());
                 if (!marks.isEmpty()) {
@@ -73,7 +73,7 @@ public class DataInitializer {
             // This is to remove them from Student Dashboard but keep data for Faculty (via
             // 459CS25002)
             List.of("DBMS", "Software Engineering").forEach(subName -> {
-                subjectRepository.findByName(subName).ifPresent(subject -> {
+                subjectRepository.findFirstByName(subName).ifPresent(subject -> {
                     studentRepository.findByRegNo("459CS25001").ifPresent(student -> {
                         // Actually better to find all marks for this student and subject
                         // We seeded CIE1 and CIE2 for DBMS, and CIE1 for SE.
@@ -278,7 +278,7 @@ public class DataInitializer {
             // ==========================================
             List<String> unwantedSubjects = List.of("DBMS", "Operating Systems", "Software Engineering");
             for (String subName : unwantedSubjects) {
-                subjectRepository.findByName(subName).ifPresent(subject -> {
+                subjectRepository.findFirstByName(subName).ifPresent(subject -> {
                     // Delete all CIE marks linked to this subject first
                     List<com.example.ia.entity.CieMark> marks = cieMarkRepository.findBySubject_Id(subject.getId());
                     if (!marks.isEmpty()) {
@@ -353,7 +353,7 @@ public class DataInitializer {
 
     private void createSubjectIfNotFound(com.example.ia.repository.SubjectRepository repo,
             String name, String dept, String instructor, int sem) {
-        com.example.ia.entity.Subject s = repo.findByName(name).orElse(new com.example.ia.entity.Subject());
+        com.example.ia.entity.Subject s = repo.findFirstByName(name).orElse(new com.example.ia.entity.Subject());
         s.setName(name);
         s.setDepartment(dept);
         s.setInstructorName(instructor);
@@ -375,7 +375,7 @@ public class DataInitializer {
             String regNo, String subjectName, String cieType, Double score) {
 
         com.example.ia.entity.Student student = studentRepo.findByRegNo(regNo).orElse(null);
-        com.example.ia.entity.Subject subject = subjectRepo.findByName(subjectName).orElse(null);
+        com.example.ia.entity.Subject subject = subjectRepo.findFirstByName(subjectName).orElse(null);
 
         if (student != null && subject != null) {
             java.util.Optional<com.example.ia.entity.CieMark> existing = marksRepo

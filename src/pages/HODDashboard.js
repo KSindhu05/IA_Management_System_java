@@ -280,7 +280,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
     };
 
     const menuItems = [
-        { label: 'Dashboard Overview', path: '#overview', icon: <LayoutDashboard size={20} />, isActive: activeTab === 'overview', onClick: () => setActiveTab('overview') },
+        { label: 'Overview', path: '#overview', icon: <LayoutDashboard size={20} />, isActive: activeTab === 'overview', onClick: () => setActiveTab('overview') },
         { label: 'CIE Schedule', path: '#cie-schedule', icon: <Calendar size={20} />, isActive: activeTab === 'cie-schedule', onClick: () => setActiveTab('cie-schedule') },
         { label: 'Add Subjects', path: '#syllabus', icon: <BookOpen size={20} />, isActive: activeTab === 'syllabus', onClick: () => setActiveTab('syllabus') },
         { label: 'IA Monitoring', path: '#monitoring', icon: <Activity size={20} />, isActive: activeTab === 'monitoring', onClick: () => setActiveTab('monitoring') },
@@ -1402,8 +1402,9 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                     />
                                 </th>
                                 <th style={{ width: '60px' }}>Sl. No</th>
-                                <th>Reg No</th>
+
                                 <th>Student Name</th>
+                                <th>Reg No</th>
                                 <th>Sem / Sec</th>
 
                                 <th>Actions</th>
@@ -1454,13 +1455,14 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                             </div>
                             <div className={styles.modalBody}>
                                 <form onSubmit={handleAddStudent} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                    <div className={styles.formGroup}>
-                                        <label>Register Number (used for login)</label>
-                                        <input value={studentForm.regNo} onChange={e => setStudentForm({ ...studentForm, regNo: e.target.value })} required placeholder="e.g. 4JK22CS001" className={styles.input} />
-                                    </div>
+
                                     <div className={styles.formGroup}>
                                         <label>Full Name</label>
                                         <input value={studentForm.name} onChange={e => setStudentForm({ ...studentForm, name: e.target.value })} required placeholder="e.g. John Doe" className={styles.input} />
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label>Register Number (used for login)</label>
+                                        <input value={studentForm.regNo} onChange={e => setStudentForm({ ...studentForm, regNo: e.target.value })} required placeholder="e.g. 4JK22CS001" className={styles.input} />
                                     </div>
                                     <div className={styles.formGroup}>
                                         <label>Email</label>
@@ -1626,21 +1628,25 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                         <thead>
                             <tr>
                                 <th style={{ width: '60px' }}>Sl. No</th>
-                                <th>Reg No</th>
                                 <th>Student Name</th>
+                                <th>Reg No</th>
+
                                 <th>Sem / Sec</th>
-                                <th>Parent Phone</th>
+
                                 <th>Action</th>
+                                <th>Parent Phone</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredStudents.length > 0 ? filteredStudents.map((std, index) => (
                                 <tr key={std.id}>
                                     <td style={{ color: '#64748b' }}>{index + 1}</td>
-                                    <td style={{ fontWeight: 600, color: '#1e293b' }}>{std.regNo}</td>
                                     <td>{std.name}</td>
+                                    <td style={{ fontWeight: 600, color: '#1e293b' }}>{std.regNo}</td>
+
+
+
                                     <td>{std.semester} - {std.section || 'A'}</td>
-                                    <td>{std.parentPhone || '-'}</td>
                                     <td>
                                         <button
                                             className={styles.secondaryBtn}
@@ -1650,6 +1656,10 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                                             <Users size={14} /> View Profile
                                         </button>
                                     </td>
+
+
+                                    <td>{std.parentPhone || '-'}</td>
+
                                 </tr>
                             )) : (
                                 <tr>
@@ -2350,7 +2360,14 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         try {
             const headers = { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json' };
             const res = await fetch(`${API_BASE_URL}/hod/assignment-requests/${requestId}/approve`, { method: 'PUT', headers });
-            const data = await res.json();
+            let data;
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                data = await res.json();
+            } else {
+                const text = await res.text();
+                data = { message: text || `Server returned status ${res.status}` };
+            }
             if (res.ok) {
                 alert(data.message || 'Request approved!');
                 fetchPendingAssignments();
@@ -2358,9 +2375,10 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                 const facRes = await fetch(`${API_BASE_URL}/hod/faculty?department=${selectedDept}`, { headers });
                 if (facRes.ok) setFacultyList(await facRes.json());
             } else {
-                alert(data.message || 'Failed to approve');
+                console.error('Approve request failed:', res.status, data);
+                alert(data.message || `Failed to approve (${res.status})`);
             }
-        } catch (e) { alert('Error approving request'); }
+        } catch (e) { console.error('Error approving request:', e); alert('Error approving request: ' + e.message); }
     };
 
     const handleRejectRequest = async (requestId) => {
@@ -2368,14 +2386,22 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         try {
             const headers = { 'Authorization': `Bearer ${user.token}`, 'Content-Type': 'application/json' };
             const res = await fetch(`${API_BASE_URL}/hod/assignment-requests/${requestId}/reject`, { method: 'PUT', headers });
-            const data = await res.json();
+            let data;
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                data = await res.json();
+            } else {
+                const text = await res.text();
+                data = { message: text || `Server returned status ${res.status}` };
+            }
             if (res.ok) {
                 alert(data.message || 'Request rejected');
                 fetchPendingAssignments();
             } else {
-                alert(data.message || 'Failed to reject');
+                console.error('Reject request failed:', res.status, data);
+                alert(data.message || `Failed to reject (${res.status})`);
             }
-        } catch (e) { alert('Error rejecting request'); }
+        } catch (e) { console.error('Error rejecting request:', e); alert('Error rejecting request: ' + e.message); }
     };
 
     const renderFacultyRequests = () => {

@@ -26,6 +26,8 @@ import {
     fetchNotifications, fetchReports, fetchHods, createHod, updateHod, deleteHod
 } from '../services/api';
 
+const API_BASE_URL = 'http://127.0.0.1:8084/api';
+
 const PrincipalDashboard = () => {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState('overview');
@@ -113,7 +115,31 @@ const PrincipalDashboard = () => {
         setTimeout(() => setToast({ show: false, msg: '', type: 'info' }), 3000);
     }, []);
 
-    const handleDownload = useCallback((item) => showToast(`Downloading ${item.name || 'document'}...`, 'info'), [showToast]);
+    const handleDownload = useCallback(async (item) => {
+        showToast(`Generating ${item.name || 'report'}...`, 'info');
+        try {
+            const token = user?.token;
+            const apiType = item.apiType || item.name.toLowerCase().replace(/ /g, '_');
+            const response = await fetch(`${API_BASE_URL}/principal/reports/download/${apiType}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error('Failed to generate report');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${apiType}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            showToast('Report downloaded successfully');
+        } catch (error) {
+            console.error('Download error:', error);
+            showToast('Failed to download report', 'error');
+        }
+    }, [user, showToast, API_BASE_URL]);
     const handleNewBroadcast = useCallback(() => setActiveModal('broadcast'), []);
     const handleSaveFaculty = useCallback((e) => { e.preventDefault(); setActiveModal(null); showToast('Faculty Saved', 'success'); }, [showToast]);
 
@@ -187,7 +213,6 @@ const PrincipalDashboard = () => {
     // }, []);
 
     // --- Notification Handlers ---
-    const API_BASE_URL = 'http://127.0.0.1:8084/api';
 
     const handleSendNotification = useCallback(async () => {
         if (!msgText.trim()) return;

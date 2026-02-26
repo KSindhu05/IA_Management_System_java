@@ -284,8 +284,83 @@ public class PrincipalController {
      */
 
     @GetMapping("/reports")
-    public List<Object> getReports() {
-        return new ArrayList<>();
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public List<Map<String, Object>> getReports() {
+        List<Map<String, Object>> reports = new ArrayList<>();
+
+        reports.add(createReportMeta("1", "Consolidated Marks Report", "Academic", "Generated now"));
+        reports.add(createReportMeta("2", "Attendance Shortage Report", "Compliance", "Generated now"));
+        reports.add(createReportMeta("3", "Faculty Performance Summary", "Faculty", "Generated now"));
+        reports.add(createReportMeta("4", "Complete Student List", "Administrative", "Generated now"));
+
+        return reports;
+    }
+
+    private Map<String, Object> createReportMeta(String id, String name, String type, String date) {
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("id", id);
+        meta.put("name", name);
+        meta.put("type", type);
+        meta.put("size", "~15 KB");
+        meta.put("date", date);
+        meta.put("apiType", name.toLowerCase().replace(" ", "_"));
+        return meta;
+    }
+
+    @GetMapping("/reports/download/{apiType}")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<String> downloadReport(@PathVariable String apiType) {
+        StringBuilder csv = new StringBuilder();
+        String filename = apiType + ".csv";
+
+        if (apiType.contains("marks")) {
+            csv.append("Reg No,Name,Department,Subject,CIE-1,CIE-2,Total\n");
+            List<CieMark> marks = cieMarkRepository.findAll();
+            for (CieMark m : marks) {
+                if (m.getStudent() == null || m.getSubject() == null)
+                    continue;
+                double c1 = m.getMarks() != null ? m.getMarks() : 0;
+                csv.append(String.format("%s,%s,%s,%s,%.1f,0,%.1f\n",
+                        m.getStudent().getRegNo(),
+                        m.getStudent().getName().replace(",", " "),
+                        m.getStudent().getDepartment(),
+                        m.getSubject().getName().replace(",", " "),
+                        c1, c1));
+            }
+        } else if (apiType.contains("attendance")) {
+            csv.append("Reg No,Name,Department,Total Classes,Present,Percentage\n");
+            List<Student> students = studentRepository.findAll();
+            for (Student s : students) {
+                List<Attendance> atts = attendanceRepository.findByStudentId(s.getId());
+                long present = atts.stream().filter(a -> "PRESENT".equalsIgnoreCase(a.getStatus())).count();
+                double pct = atts.isEmpty() ? 0 : (double) present / atts.size() * 100;
+                if (pct < 75 || atts.isEmpty()) {
+                    csv.append(String.format("%s,%s,%s,%d,%d,%.1f%%\n",
+                            s.getRegNo(), s.getName().replace(",", " "), s.getDepartment(),
+                            atts.size(), present, pct));
+                }
+            }
+        } else if (apiType.contains("faculty")) {
+            csv.append("Name,Department,Role,Email\n");
+            List<User> faculty = userRepository.findByRole("FACULTY");
+            for (User f : faculty) {
+                csv.append(String.format("%s,%s,%s,%s\n",
+                        f.getFullName().replace(",", " "), f.getDepartment(), f.getRole(), f.getEmail()));
+            }
+        } else {
+            csv.append("Reg No,Name,Department,Semester,Section\n");
+            List<Student> students = studentRepository.findAll();
+            for (Student s : students) {
+                csv.append(String.format("%s,%s,%s,%s,%s\n",
+                        s.getRegNo(), s.getName().replace(",", " "), s.getDepartment(), s.getSemester(),
+                        s.getSection()));
+            }
+        }
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=" + filename)
+                .header("Content-Type", "text/csv")
+                .body(csv.toString());
     }
 
     @GetMapping("/grievances")

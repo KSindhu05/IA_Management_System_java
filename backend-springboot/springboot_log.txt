@@ -1,0 +1,93 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------< com.example:ia-management-backend >------------------
+[INFO] Building ia-management-backend 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.2.3:run (default-cli) > test-compile @ ia-management-backend >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ ia-management-backend ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ ia-management-backend ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 48 source files with javac [debug release 17] to target\classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ ia-management-backend ---
+[INFO] Copying 0 resource from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ ia-management-backend ---
+[INFO] Changes detected - recompiling the module! :dependency
+[INFO] 
+[INFO] <<< spring-boot:3.2.3:run (default-cli) < test-compile @ ia-management-backend <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.2.3:run (default-cli) @ ia-management-backend ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.3)
+
+2026-02-25T15:35:59.304+05:30  INFO 21632 --- [ia-management-system] [           main] com.example.ia.IaManagementApplication   : Starting IaManagementApplication using Java 24.0.2 with PID 21632 (D:\IA_Management_system\backend-springboot\target\classes started by hp in D:\IA_Management_system\backend-springboot)
+2026-02-25T15:35:59.308+05:30  INFO 21632 --- [ia-management-system] [           main] com.example.ia.IaManagementApplication   : No active profile set, falling back to 1 default profile: "default"
+2026-02-25T15:36:00.238+05:30  INFO 21632 --- [ia-management-system] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-02-25T15:36:00.347+05:30  INFO 21632 --- [ia-management-system] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 98 ms. Found 8 JPA repository interfaces.
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.apache.tomcat.jni.Library in an unnamed module (file:/C:/Users/hp/.m2/repository/org/apache/tomcat/embed/tomcat-embed-core/10.1.19/tomcat-embed-core-10.1.19.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+2026-02-25T15:36:01.107+05:30  INFO 21632 --- [ia-management-system] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8084 (http)
+2026-02-25T15:36:01.119+05:30  INFO 21632 --- [ia-management-system] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-02-25T15:36:01.119+05:30  INFO 21632 --- [ia-management-system] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.19]
+2026-02-25T15:36:01.163+05:30  INFO 21632 --- [ia-management-system] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-02-25T15:36:01.163+05:30  INFO 21632 --- [ia-management-system] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1768 ms
+2026-02-25T15:36:01.286+05:30  INFO 21632 --- [ia-management-system] [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-02-25T15:36:01.320+05:30  INFO 21632 --- [ia-management-system] [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.4.4.Final
+2026-02-25T15:36:01.344+05:30  INFO 21632 --- [ia-management-system] [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-02-25T15:36:01.506+05:30  INFO 21632 --- [ia-management-system] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-02-25T15:36:01.534+05:30  INFO 21632 --- [ia-management-system] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-02-25T15:36:01.680+05:30  INFO 21632 --- [ia-management-system] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@6eede35e
+2026-02-25T15:36:01.681+05:30  INFO 21632 --- [ia-management-system] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-02-25T15:36:01.726+05:30  WARN 21632 --- [ia-management-system] [           main] org.hibernate.orm.deprecation            : HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-02-25T15:36:02.530+05:30  INFO 21632 --- [ia-management-system] [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-02-25T15:36:02.827+05:30  INFO 21632 --- [ia-management-system] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-02-25T15:36:03.346+05:30  INFO 21632 --- [ia-management-system] [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-02-25T15:36:04.084+05:30  WARN 21632 --- [ia-management-system] [           main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-02-25T15:36:04.395+05:30  INFO 21632 --- [ia-management-system] [           main] o.s.s.web.DefaultSecurityFilterChain     : Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@67f5066e, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@57fd3b57, org.springframework.security.web.context.SecurityContextHolderFilter@7f9ebcfe, org.springframework.security.web.header.HeaderWriterFilter@518d4537, org.springframework.web.filter.CorsFilter@6903bec9, org.springframework.security.web.authentication.logout.LogoutFilter@214fe287, com.example.ia.security.AuthTokenFilter@598f1faf, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@712adc04, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@165634aa, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@2f6fcc70, org.springframework.security.web.session.SessionManagementFilter@389f4282, org.springframework.security.web.access.ExceptionTranslationFilter@23ec291e, org.springframework.security.web.access.intercept.AuthorizationFilter@3f679ce]
+2026-02-25T15:36:04.613+05:30  INFO 21632 --- [ia-management-system] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8084 (http) with context path ''
+2026-02-25T15:36:04.619+05:30  INFO 21632 --- [ia-management-system] [           main] com.example.ia.IaManagementApplication   : Started IaManagementApplication in 5.885 seconds (process running for 6.298)
+Running Smart SchemaFixer...
+? JAVA CLEANUP: Fixed/Deleted 0 zero-value marks.
+? HOD user updated (password preserved): Jaffar@CSE (MD Jaffar)
+? Faculty FAC001 updated (password preserved): Miss Manju Sree
+? Faculty FAC002 updated (password preserved): Ramesh Gouda
+? Faculty FAC003 updated (password preserved): Wahida Banu
+? Faculty FAC004 updated (password preserved): Nasrin Banu
+? Total Students in DB: 813
+? Updated all students' department to CSE
+? Subject updated: Engineering Maths-II (dept=CSE, instructor=Miss Manju Sree)
+? Subject updated: CAEG (dept=CSE, instructor=Ramesh Gouda)
+? Subject updated: Python (dept=CSE, instructor=Wahida Banu)
+? Subject updated: Indian Constitution (dept=CSE, instructor=Wahida Banu)
+? Subject updated: English Communication (dept=CSE, instructor=Nasrin Banu)
+? Sample CIE marks seeded for 10 students
+2026-02-25T15:38:14.391+05:30  INFO 21632 --- [ia-management-system] [nio-8084-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-02-25T15:38:14.391+05:30  INFO 21632 --- [ia-management-system] [nio-8084-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-02-25T15:38:14.393+05:30  INFO 21632 --- [ia-management-system] [nio-8084-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 2 ms
+Terminate batch job (Y/N)? 2026-02-25T15:38:41.084+05:30  INFO 21632 --- [ia-management-system] [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-02-25T15:38:41.085+05:30  INFO 21632 --- [ia-management-system] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-02-25T15:38:41.093+05:30  INFO 21632 --- [ia-management-system] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  02:49 min
+[INFO] Finished at: 2026-02-25T15:38:41+05:30
+[INFO] ------------------------------------------------------------------------
