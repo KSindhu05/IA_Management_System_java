@@ -22,10 +22,10 @@ These are the valid credentials seeded by the backend (`DataInitializer.java`). 
 | `faculty_cs` | `password` | Computer Science |
 
 ## 🏛️ HOD (Head of Department)
-| Field | Value |
-| :--- | :--- |
-| **Username** | `hod_cs` |
-| **Password** | `password` |
+| Department | Username | Password |
+| :--- | :--- | :--- |
+| **CSE** | `Jaffar@CSE` | `password` |
+| **EEE** | `HOD@EEE` | `password` |
 
 ## 🏫 Principal
 | Field | Value |

@@ -126,6 +126,22 @@ public class DataInitializer {
             System.out.println("✅ HOD user " + (hodIsNew ? "created" : "updated (password preserved)")
                     + ": Jaffar@CSE (MD Jaffar)");
 
+            // HOD - EEE Department
+            boolean hodEeeIsNew = !userRepository.existsByUsername("HOD@EEE");
+            User hodEeeUser = userRepository.findByUsername("HOD@EEE").orElse(new User());
+            hodEeeUser.setUsername("HOD@EEE");
+            if (hodEeeIsNew) {
+                hodEeeUser.setPassword(passwordEncoder.encode(defaultPassword));
+            }
+            hodEeeUser.setEmail("hod.eee@example.com");
+            hodEeeUser.setRole("HOD");
+            hodEeeUser.setFullName("HOD EEE");
+            hodEeeUser.setDesignation("Head of Department");
+            hodEeeUser.setDepartment("EEE");
+            userRepository.save(hodEeeUser);
+            System.out.println("✅ HOD EEE user " + (hodEeeIsNew ? "created" : "updated (password preserved)")
+                    + ": HOD@EEE");
+
             // 3. Faculty Seeding
             // FAC001 - Miss Manju Sree
             boolean fac1IsNew = !userRepository.existsByUsername("FAC001");

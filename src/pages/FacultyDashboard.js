@@ -2706,13 +2706,13 @@ const FacultyDashboard = () => {
             const res = await fetch(`${API_BASE_URL}/faculty/available-sections?department=${encodeURIComponent(dept)}&semester=${encodeURIComponent(sem)}`, { headers });
             if (res.ok) {
                 const data = await res.json();
-                setAvailableSections(data);
+                setAvailableSections(Array.isArray(data) && data.length > 0 ? data : []);
             } else {
-                setAvailableSections(['A']);
+                setAvailableSections([]);
             }
         } catch (e) {
             console.error("Failed to fetch available sections", e);
-            setAvailableSections(['A']);
+            setAvailableSections([]);
         }
     };
 
@@ -2791,6 +2791,9 @@ const FacultyDashboard = () => {
                                     setSelectedTargetDept(e.target.value);
                                     setSelectedAssignSubjects([]);
                                     setDeptSubjects([]);
+                                    setAssignSemester('');
+                                    setAssignSections([]);
+                                    setAvailableSections([]);
                                     if (e.target.value) fetchDeptSubjects(e.target.value);
                                 }}
                                 style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.95rem' }}
@@ -2807,12 +2810,15 @@ const FacultyDashboard = () => {
                             <select
                                 className={styles.largeInput}
                                 value={assignSemester}
+                                disabled={!selectedTargetDept}
                                 onChange={e => {
                                     setAssignSemester(e.target.value);
+                                    setSelectedAssignSubjects([]);
+                                    setAssignSections([]);
+                                    setAvailableSections([]);
                                     if (selectedTargetDept && e.target.value) {
                                         fetchAvailableSections(selectedTargetDept, e.target.value);
                                     }
-                                    setSelectedAssignSubjects([]);
                                 }}
                                 style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.95rem' }}
                             >
