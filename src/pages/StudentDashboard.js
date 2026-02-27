@@ -526,12 +526,20 @@ const StudentDashboard = () => {
                                                     const filledCount = relevantCies.filter(c => c.score !== '-').length;
                                                     if (filledCount === 0) return <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</td>;
                                                     if (parts.length > 0) {
-                                                        return <td style={{ fontSize: '0.7rem', fontWeight: 600, color: worstColor, background: worstBg, whiteSpace: 'normal', lineHeight: 1.3 }}>{parts.join(' | ')}</td>;
+                                                        const remarkText = parts.join(' | ');
+                                                        return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: worstBg }}>
+                                                            <div style={{ display: 'inline-block', whiteSpace: 'nowrap', fontSize: '0.65rem', fontWeight: 600, color: worstColor, padding: '8px 4px', animation: remarkText.length > 20 ? 'scrollRemarks 12s linear infinite' : 'none' }}>{remarkText}</div>
+                                                            <style>{`@keyframes scrollRemarks { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }`}</style>
+                                                        </td>;
                                                     }
                                                     // All good
                                                     const avg = item.total / filledCount;
-                                                    if (avg >= 40) return <td style={{ fontSize: '0.75rem', fontWeight: 600, color: '#15803d', background: '#f0fdf4' }}>Excellent</td>;
-                                                    return <td style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb', background: '#eff6ff' }}>Good</td>;
+                                                    const remarkLabel = avg >= 40 ? 'Excellent' : 'Good';
+                                                    const remarkCol = avg >= 40 ? '#15803d' : '#2563eb';
+                                                    const remarkBg = avg >= 40 ? '#f0fdf4' : '#eff6ff';
+                                                    return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: remarkBg }}>
+                                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: remarkCol, padding: '8px 4px' }}>{remarkLabel}</div>
+                                                    </td>;
                                                 })()}
                                             </tr>
                                         );
