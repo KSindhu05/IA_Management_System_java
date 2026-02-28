@@ -527,9 +527,8 @@ const StudentDashboard = () => {
                                                     if (filledCount === 0) return <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</td>;
                                                     if (parts.length > 0) {
                                                         const remarkText = parts.join(' | ');
-                                                        return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: worstBg }}>
-                                                            <div style={{ display: 'inline-block', whiteSpace: 'nowrap', fontSize: '0.65rem', fontWeight: 600, color: worstColor, padding: '8px 4px', animation: remarkText.length > 20 ? 'scrollRemarks 12s linear infinite' : 'none' }}>{remarkText}</div>
-                                                            <style>{`@keyframes scrollRemarks { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }`}</style>
+                                                        return <td style={{ padding: '6px 8px' }}>
+                                                            <span style={{ display: 'inline-block', fontSize: '0.72rem', fontWeight: 600, color: worstColor, background: worstBg, padding: '3px 8px', borderRadius: '12px', whiteSpace: 'normal', lineHeight: '1.4' }}>{remarkText}</span>
                                                         </td>;
                                                     }
                                                     // All good
@@ -537,8 +536,8 @@ const StudentDashboard = () => {
                                                     const remarkLabel = avg >= 40 ? 'Excellent' : 'Good';
                                                     const remarkCol = avg >= 40 ? '#15803d' : '#2563eb';
                                                     const remarkBg = avg >= 40 ? '#f0fdf4' : '#eff6ff';
-                                                    return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: remarkBg }}>
-                                                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: remarkCol, padding: '8px 4px' }}>{remarkLabel}</div>
+                                                    return <td style={{ padding: '6px 8px' }}>
+                                                        <span style={{ display: 'inline-block', fontSize: '0.72rem', fontWeight: 600, color: remarkCol, background: remarkBg, padding: '3px 8px', borderRadius: '12px' }}>{remarkLabel}</span>
                                                     </td>;
                                                 })()}
                                             </tr>
