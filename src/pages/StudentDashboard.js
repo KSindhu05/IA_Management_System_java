@@ -272,18 +272,20 @@ const StudentDashboard = () => {
                                                     <div className={styles.progressBar} style={{ width: `${progressWidth}%`, background: status.color }}></div>
                                                 </div>
                                             </td>
-                                            <td>{(() => {
+                                            {(() => {
                                                 const score = mark.cie1Score != null ? parseFloat(mark.cie1Score) : null;
                                                 const att = mark.attendancePercentage != null ? parseFloat(mark.attendancePercentage) : null;
-                                                if (score == null) return <span style={{ color: '#94a3b8' }}>-</span>;
+                                                if (score == null) return <td style={{ width: '250px', minWidth: '250px', padding: 0 }}><div style={{ fontSize: '0.72rem', color: '#94a3b8', padding: '8px 4px' }}>-</div></td>;
                                                 let remark = ''; let color = '#64748b'; let bg = 'transparent';
                                                 if (score < 25 && att != null && att < 75) { remark = 'CIE-1: Marks & Att Low - Meet HOD'; color = '#dc2626'; bg = '#fef2f2'; }
                                                 else if (score < 25) { remark = 'CIE-1: Marks Low - Meet HOD'; color = '#ea580c'; bg = '#fff7ed'; }
                                                 else if (att != null && att < 75) { remark = 'CIE-1: Att Low - Meet HOD'; color = '#ea580c'; bg = '#fff7ed'; }
                                                 else if (score >= 40 && (att == null || att >= 75)) { remark = 'Excellent'; color = '#15803d'; bg = '#f0fdf4'; }
                                                 else { remark = 'Good'; color = '#2563eb'; bg = '#eff6ff'; }
-                                                return <span className={styles.badge} style={{ color, background: bg, fontSize: '0.7rem', fontWeight: 600 }}>{remark}</span>;
-                                            })()}</td>
+                                                return <td style={{ width: '250px', minWidth: '250px', padding: '8px 4px', background: bg }}>
+                                                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color, whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.4' }}>{remark}</div>
+                                                </td>;
+                                            })()}
                                         </tr>
                                     );
                                 }) : <tr><td colSpan="5" style={{ textAlign: 'center', padding: '1rem' }}>Loading real-time data...</td></tr>}
@@ -524,11 +526,11 @@ const StudentDashboard = () => {
                                                         }
                                                     });
                                                     const filledCount = relevantCies.filter(c => c.score !== '-').length;
-                                                    if (filledCount === 0) return <td style={{ color: '#94a3b8', fontSize: '0.8rem' }}>-</td>;
+                                                    if (filledCount === 0) return <td style={{ width: '250px', minWidth: '250px', padding: 0 }}><div style={{ fontSize: '0.72rem', color: '#94a3b8', padding: '8px 4px' }}>-</div></td>;
                                                     if (parts.length > 0) {
                                                         const remarkText = parts.join(' | ');
-                                                        return <td style={{ padding: '6px 8px' }}>
-                                                            <span style={{ display: 'inline-block', fontSize: '0.72rem', fontWeight: 600, color: worstColor, background: worstBg, padding: '3px 8px', borderRadius: '12px', whiteSpace: 'normal', lineHeight: '1.4' }}>{remarkText}</span>
+                                                        return <td style={{ width: '250px', minWidth: '250px', padding: '8px 4px', background: worstBg }}>
+                                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: worstColor, whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.4' }}>{remarkText}</div>
                                                         </td>;
                                                     }
                                                     // All good
@@ -536,8 +538,8 @@ const StudentDashboard = () => {
                                                     const remarkLabel = avg >= 40 ? 'Excellent' : 'Good';
                                                     const remarkCol = avg >= 40 ? '#15803d' : '#2563eb';
                                                     const remarkBg = avg >= 40 ? '#f0fdf4' : '#eff6ff';
-                                                    return <td style={{ padding: '6px 8px' }}>
-                                                        <span style={{ display: 'inline-block', fontSize: '0.72rem', fontWeight: 600, color: remarkCol, background: remarkBg, padding: '3px 8px', borderRadius: '12px' }}>{remarkLabel}</span>
+                                                    return <td style={{ width: '250px', minWidth: '250px', padding: '8px 4px', background: remarkBg }}>
+                                                        <div style={{ fontSize: '0.72rem', fontWeight: 600, color: remarkCol, whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.4' }}>{remarkLabel}</div>
                                                     </td>;
                                                 })()}
                                             </tr>
