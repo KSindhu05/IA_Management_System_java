@@ -1266,9 +1266,9 @@
 
 .markInput {
     width: 100%;
-    max-width: 45px;
+    max-width: 75px;
     margin: 0 auto;
-    padding: 0.4rem 0.2rem;
+    padding: 0.4rem 0.4rem;
     border: 1.5px solid #e2e8f0;
     border-radius: 8px;
     text-align: center;
