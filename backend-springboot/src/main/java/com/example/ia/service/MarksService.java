@@ -53,13 +53,23 @@ public class MarksService {
 
             if (existing.isPresent()) {
                 CieMark mark = existing.get();
-                mark.setMarks(payload.getMarks());
+                // CRITICAL FIX: Only overwrite marks if the incoming value is non-null.
+                // If null is sent (empty cell in UI), preserve the previously saved value.
+                // This prevents saved draft marks from being wiped when faculty saves again
+                // with some cells still empty.
+                if (payload.getMarks() != null) {
+                    mark.setMarks(payload.getMarks());
+                }
                 // Persist attendance if provided
                 if (payload.getAttendancePercentage() != null) {
                     mark.setAttendancePercentage(payload.getAttendancePercentage());
                 }
                 // Reset status to PENDING so faculty can re-submit (handles REJECTED re-edits)
-                mark.setStatus("PENDING");
+                // Only reset if marks are present (don't demote a submitted record that still
+                // has marks)
+                if (payload.getMarks() != null) {
+                    mark.setStatus("PENDING");
+                }
                 cieMarkRepository.save(mark);
             } else {
                 // Only create a new record if there are actual marks to save
