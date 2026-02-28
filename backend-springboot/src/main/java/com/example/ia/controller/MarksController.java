@@ -57,34 +57,34 @@ public class MarksController {
     @PostMapping("/update/batch")
     @PreAuthorize("hasRole('FACULTY') or hasRole('HOD')")
     public ResponseEntity<?> updateBatchMarks(@RequestBody List<MarkUpdateDto> markDtos) {
-        // Server-side CIE role validation for FACULTY role
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        com.example.ia.entity.User facultyUser = userRepository.findByUsername(username).orElse(null);
-        String cieRole = facultyUser != null ? facultyUser.getCieRole() : null;
-
         List<CieMark> marksToSave = new ArrayList<>();
 
         for (MarkUpdateDto dto : markDtos) {
-            // Enforce CIE role restrictions (only for actual marks, skip null/empty saves)
-            if (cieRole != null && dto.getCo1() != null && dto.getIaType() != null) {
-                String iaType = dto.getIaType().toUpperCase();
-                boolean isLabType = iaType.equals("CIE3") || iaType.equals("CIE4");
-                boolean isTheoryType = !isLabType; // CIE1, CIE2, CIE5 = theory
-                if ("LAB".equals(cieRole) && isTheoryType) {
-                    return ResponseEntity.status(403).body(
-                            java.util.Map.of("message", "LAB faculty is not authorized to save " + iaType + " marks"));
-                }
-                if ("THEORY".equals(cieRole) && isLabType) {
-                    return ResponseEntity.status(403).body(
-                            java.util.Map.of("message",
-                                    "THEORY faculty is not authorized to save " + iaType + " marks"));
-                }
-            }
-
             Student student = studentRepository.findById(dto.getStudentId()).orElse(null);
             Subject subject = subjectRepository.findById(dto.getSubjectId()).orElse(null);
 
             if (student != null && subject != null) {
+                // Enforce Name-Based CIE role restrictions (only for actual marks/attendance
+                // updates)
+                if ((dto.getCo1() != null || dto.getAttendancePercentage() != null) && dto.getIaType() != null) {
+                    String name = subject.getName().toLowerCase();
+                    String iaType = dto.getIaType().toUpperCase();
+
+                    boolean isLabType = iaType.equals("CIE3") || iaType.equals("CIE4");
+                    boolean isTheoryType = !isLabType; // CIE1, CIE2, CIE5 = theory
+
+                    if (name.contains("(lab)") && isTheoryType) {
+                        return ResponseEntity.status(403).body(
+                                java.util.Map.of("message",
+                                        "Cannot save theory marks (" + iaType + ") for a Lab subject."));
+                    }
+                    if (name.contains("(theory)") && isLabType) {
+                        return ResponseEntity.status(403).body(
+                                java.util.Map.of("message",
+                                        "Cannot save lab marks (" + iaType + ") for a Theory subject."));
+                    }
+                }
+
                 CieMark mark = new CieMark();
                 mark.setStudent(student);
                 mark.setSubject(subject);

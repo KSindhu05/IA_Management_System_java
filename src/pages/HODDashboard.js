@@ -102,8 +102,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
         designation: 'Assistant Professor',
         semester: '',
         section: '',
-        subjects: '',
-        cieRole: '' // THEORY, LAB, or empty (ALL)
+        subjects: ''
     });
 
     // CIE Schedule Form State
@@ -297,7 +296,6 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
             email: facultyForm.email,
             designation: facultyForm.designation,
             department: selectedDept,
-            cieRole: facultyForm.cieRole || null  // Send THEORY, LAB, or null (ALL)
         };
         if (!editingFaculty && facultyForm.password) {
             data.password = facultyForm.password;

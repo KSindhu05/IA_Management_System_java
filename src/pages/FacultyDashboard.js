@@ -731,15 +731,21 @@ const FacultyDashboard = () => {
 
                 console.log('CIE Statuses:', cieStatuses);
 
-                // Apply CIE role locking based on subject's cieRole
-                // cieRole: "THEORY" = CIE-1,2,5 only | "LAB" = CIE-3,4 only | null = all open
-                const cieRole = subject.cieRole || null;
+                // Apply CIE role locking based on subject name
+                const subjectName = (subject.name || '').toLowerCase();
+                let role = 'ALL';
+                if (subjectName.includes('(lab)') || subjectName.endsWith('-l')) {
+                    role = 'LAB';
+                } else if (subjectName.includes('(theory)') || subjectName.endsWith('-t')) {
+                    role = 'THEORY';
+                }
+
                 setCieLockStatus({
-                    cie1: cieRole === 'LAB',     // LAB faculty cannot edit CIE-1
-                    cie2: cieRole === 'LAB',     // LAB faculty cannot edit CIE-2
-                    cie3: cieRole === 'THEORY',  // THEORY faculty cannot edit CIE-3
-                    cie4: cieRole === 'THEORY',  // THEORY faculty cannot edit CIE-4
-                    cie5: cieRole === 'LAB',     // LAB faculty cannot edit CIE-5 (Activities = Theory)
+                    cie1: role === 'LAB',     // LAB faculty cannot edit CIE-1
+                    cie2: role === 'LAB',     // LAB faculty cannot edit CIE-2
+                    cie3: role === 'THEORY',  // THEORY faculty cannot edit CIE-3
+                    cie4: role === 'THEORY',  // THEORY faculty cannot edit CIE-4
+                    cie5: role === 'LAB',     // LAB faculty cannot edit CIE-5 (Activities = Theory)
                 });
                 setIsLocked(false);
 
