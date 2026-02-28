@@ -844,29 +844,24 @@ const FacultyDashboard = () => {
                 if (cieLockStatus[key]) return;
 
                 const val = sMarks[key];
-
-                // Include attendance percentage for this specific CIE
                 const attField = key + 'Att';
-                const attVal = sMarks[attField] !== '' && sMarks[attField] !== undefined ? parseFloat(sMarks[attField]) : null;
+                const attStr = sMarks[attField];
 
-                // If the field was cleared (empty string), send null to clear it in backend
-                if (val === '' || val === null || val === undefined) {
-                    payload.push({
-                        studentId: parseInt(studentId),
-                        subjectId: selectedSubject.id,
-                        iaType: key.toUpperCase(),
-                        co1: null,
-                        co2: 0,
-                        attendancePercentage: attVal
-                    });
-                    return;
-                }
+                let attVal = null;
+                if (attStr === '') attVal = -1; // -1 signals backend to clear the field
+                else if (attStr !== undefined && attStr !== null) attVal = parseFloat(attStr);
 
-                let score = 0;
-                if (val === 'Ab') score = 0;
-                else score = parseFloat(val);
+                let score = null;
+                if (val === '') score = -1; // -1 signals backend to clear the field
+                else if (val === 'Ab') score = 0;
+                else if (val !== undefined && val !== null) score = parseFloat(val);
 
-                if (isNaN(score) && val !== 'Ab') return;
+                // If both are completely untouched/undefined, skip sending this CIE type entirely
+                if (score === null && attVal === null) return;
+
+                // Validate score if it's a normal number
+                if (score !== null && score !== -1 && isNaN(score)) return;
+                if (attVal !== null && attVal !== -1 && isNaN(attVal)) return;
 
                 payload.push({
                     studentId: parseInt(studentId),

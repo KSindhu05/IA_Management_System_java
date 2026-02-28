@@ -53,28 +53,43 @@ public class MarksService {
 
             if (existing.isPresent()) {
                 CieMark mark = existing.get();
-                // CRITICAL FIX: Only overwrite marks if the incoming value is non-null.
-                // If null is sent (empty cell in UI), preserve the previously saved value.
-                // This prevents saved draft marks from being wiped when faculty saves again
-                // with some cells still empty.
+                // If the frontend sends -1, it means the user explicitly cleared the field.
+                // If it sends null, it means the field was untouched and shouldn't be
+                // overwritten.
                 if (payload.getMarks() != null) {
-                    mark.setMarks(payload.getMarks());
+                    if (payload.getMarks() == -1) {
+                        mark.setMarks(null);
+                    } else {
+                        mark.setMarks(payload.getMarks());
+                    }
                 }
-                // Persist attendance if provided
+
+                // Persist or clear attendance
                 if (payload.getAttendancePercentage() != null) {
-                    mark.setAttendancePercentage(payload.getAttendancePercentage());
+                    if (payload.getAttendancePercentage() == -1) {
+                        mark.setAttendancePercentage(null);
+                    } else {
+                        mark.setAttendancePercentage(payload.getAttendancePercentage());
+                    }
                 }
-                // Reset status to PENDING so faculty can re-submit (handles REJECTED re-edits)
-                // Only reset if marks are present (don't demote a submitted record that still
-                // has marks)
-                if (payload.getMarks() != null) {
+
+                // Reset status to PENDING so faculty can re-submit
+                // But only if there is still at least one mark/att explicitly saved
+                if (mark.getMarks() != null || mark.getAttendancePercentage() != null) {
                     mark.setStatus("PENDING");
                 }
                 cieMarkRepository.save(mark);
             } else {
-                // Only create a new record if there are actual marks to save
-                // Don't create empty placeholders for cleared fields
-                if (payload.getMarks() != null) {
+                // For new records, convert explicit clears (-1) to null
+                if (payload.getMarks() != null && payload.getMarks() == -1) {
+                    payload.setMarks(null);
+                }
+                if (payload.getAttendancePercentage() != null && payload.getAttendancePercentage() == -1) {
+                    payload.setAttendancePercentage(null);
+                }
+
+                // Only create a new record if there are actual marks or attendance to save
+                if (payload.getMarks() != null || payload.getAttendancePercentage() != null) {
                     if (payload.getStatus() == null)
                         payload.setStatus("PENDING");
                     cieMarkRepository.save(payload);
