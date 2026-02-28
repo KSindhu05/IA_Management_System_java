@@ -2255,7 +2255,7 @@ const HODDashboard = ({ isSpectator = false, spectatorDept = null }) => {
                     </div>
                 </div>
             </header>
-            <div className={styles.scrollableContent}>
+            <div className={styles.scrollableContent} style={activeTab === 'update-marks' ? { padding: '2rem 0' } : {}}>
                 {!isMyDept ? (<AccessDeniedView />) : renderContent()}
             </div>
             {renderStudentProfileModal()}
