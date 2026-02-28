@@ -82,17 +82,29 @@ public class FacultyClassAnalytics {
     }
 
     public static class LowPerformer {
+        private String regNo;
         private String name;
         private String subject;
+        private String cieType;
         private double score;
 
         public LowPerformer() {
         }
 
-        public LowPerformer(String name, String subject, double score) {
+        public LowPerformer(String regNo, String name, String subject, String cieType, double score) {
+            this.regNo = regNo;
             this.name = name;
             this.subject = subject;
+            this.cieType = cieType;
             this.score = score;
+        }
+
+        public String getRegNo() {
+            return regNo;
+        }
+
+        public void setRegNo(String regNo) {
+            this.regNo = regNo;
         }
 
         public String getName() {
@@ -109,6 +121,14 @@ public class FacultyClassAnalytics {
 
         public void setSubject(String subject) {
             this.subject = subject;
+        }
+
+        public String getCieType() {
+            return cieType;
+        }
+
+        public void setCieType(String cieType) {
+            this.cieType = cieType;
         }
 
         public double getScore() {

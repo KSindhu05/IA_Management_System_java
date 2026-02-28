@@ -369,15 +369,15 @@ public class DataInitializer {
 
     private void createSubjectIfNotFound(com.example.ia.repository.SubjectRepository repo,
             String name, String dept, String instructor, int sem) {
-        com.example.ia.entity.Subject s = repo.findFirstByName(name).orElse(new com.example.ia.entity.Subject());
+        String code = "SUB" + name.substring(0, 3).toUpperCase();
+        com.example.ia.entity.Subject s = repo.findByCodeAndDepartment(code, dept)
+                .orElseGet(() -> repo.findFirstByName(name).orElse(new com.example.ia.entity.Subject()));
         s.setName(name);
         s.setDepartment(dept);
         s.setInstructorName(instructor);
         s.setSemester(sem);
-        if (s.getCode() == null || s.getCode().isEmpty()) {
-            s.setCode("SUB" + name.substring(0, 3).toUpperCase());
-        }
-        if (s.getCredits() == 0) {
+        s.setCode(code);
+        if (s.getCredits() == null || s.getCredits() == 0) {
             s.setCredits(4);
         }
         repo.save(s);

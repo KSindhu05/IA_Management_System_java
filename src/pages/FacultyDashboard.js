@@ -811,9 +811,10 @@ const FacultyDashboard = () => {
                 const minScore = Math.min(s1, s2);
 
                 if (minScore < 15) { // Threshold 15/30
-                    const student = studentsList.find(s => s.id === stdId);
+                    const student = studentsList.find(s => s.id === parseInt(stdId));
                     if (student) {
                         lowList.push({
+                            regNo: student.regNo,
                             name: student.name,
                             subject: subject.name,
                             score: minScore

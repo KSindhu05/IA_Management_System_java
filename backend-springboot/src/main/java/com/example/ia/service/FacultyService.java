@@ -209,7 +209,8 @@ public class FacultyService {
                         low++;
                         if (lowList.size() < 5) {
                             lowList.add(new FacultyClassAnalytics.LowPerformer(
-                                    mark.getStudent().getName(), sub.getName(), score));
+                                    mark.getStudent().getRegNo(), mark.getStudent().getName(), sub.getName(),
+                                    mark.getCieType(), score));
                         }
                     }
                     if (score >= 40) {
