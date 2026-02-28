@@ -1312,6 +1312,12 @@ const FacultyDashboard = () => {
                                 if (overviewDepartments.length === 0) {
                                     return <p>No departments found.</p>;
                                 }
+                                if (overviewDepartments.length === 1) {
+                                    // Automatically set it so we skip the Level 1 screen next render,
+                                    // but for this render, we just return the next level immediately
+                                    setTimeout(() => setSelectedOverviewDept(overviewDepartments[0]), 0);
+                                    return <div style={{ textAlign: 'center', padding: '2rem' }}>Loading subjects...</div>;
+                                }
                                 return (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1.5rem' }}>
                                         {overviewDepartments.map(dept => (
@@ -1355,13 +1361,22 @@ const FacultyDashboard = () => {
                         <section>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <button
-                                        onClick={() => setSelectedOverviewDept(null)}
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}
-                                    >
-                                        ← Back
-                                    </button>
-                                    <h2 className={styles.sectionTitle} style={{ margin: 0 }}>Subjects - {selectedOverviewDept}</h2>
+                                    {(() => {
+                                        const overviewDepartments = [...new Set(mySubjects.map(sub => sub.department).filter(Boolean))].sort();
+                                        return (
+                                            <>
+                                                {overviewDepartments.length > 1 ? (
+                                                    <button
+                                                        onClick={() => setSelectedOverviewDept(null)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: '500' }}
+                                                    >
+                                                        ← Back
+                                                    </button>
+                                                ) : null}
+                                                <h2 className={styles.sectionTitle} style={{ margin: 0 }}>Subjects {overviewDepartments.length > 1 ? `- ${selectedOverviewDept}` : ''}</h2>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -1723,6 +1738,11 @@ const FacultyDashboard = () => {
                 );
             }
 
+            if (cieDepartments.length === 1) {
+                setTimeout(() => setSelectedCieDept(cieDepartments[0]), 0);
+                return <div style={{ textAlign: 'center', padding: '4rem' }}>Loading subjects...</div>;
+            }
+
             return (
                 <div className={styles.sectionContainer}>
                     <div className={styles.engagingHeader}>
@@ -1780,15 +1800,18 @@ const FacultyDashboard = () => {
         // Level 2: Select Subject for a previously selected Department
         if (!selectedSubject && selectedCieDept) {
             const filteredSubjects = mySubjects.filter(sub => sub.department === selectedCieDept);
+            const cieDepartments = [...new Set(mySubjects.map(sub => sub.department).filter(Boolean))].sort();
 
             return (
                 <div className={styles.sectionContainer}>
                     <div
                         className={styles.backLink}
-                        onClick={() => setSelectedCieDept(null)}
+                        onClick={() => {
+                            if (cieDepartments.length > 1) setSelectedCieDept(null);
+                        }}
                         style={{
                             marginBottom: '1rem',
-                            display: 'inline-flex',
+                            display: cieDepartments.length > 1 ? 'inline-flex' : 'none',
                             alignItems: 'center',
                             justifyContent: 'center',
                             background: '#e0f2fe',
