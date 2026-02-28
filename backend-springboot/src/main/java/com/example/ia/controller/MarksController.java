@@ -7,6 +7,7 @@ import com.example.ia.payload.request.MarkUpdateDto;
 import com.example.ia.payload.response.MessageResponse;
 import com.example.ia.repository.StudentRepository;
 import com.example.ia.repository.SubjectRepository;
+import com.example.ia.repository.UserRepository;
 import com.example.ia.service.MarksService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +32,9 @@ public class MarksController {
     @Autowired
     SubjectRepository subjectRepository;
 
+    @Autowired
+    UserRepository userRepository;
+
     @GetMapping("/subject/{subjectId}")
     @PreAuthorize("hasRole('FACULTY') or hasRole('HOD') or hasRole('PRINCIPAL')")
     public List<CieMark> getMarksBySubject(@PathVariable Long subjectId) {
@@ -53,9 +57,30 @@ public class MarksController {
     @PostMapping("/update/batch")
     @PreAuthorize("hasRole('FACULTY') or hasRole('HOD')")
     public ResponseEntity<?> updateBatchMarks(@RequestBody List<MarkUpdateDto> markDtos) {
+        // Server-side CIE role validation for FACULTY role
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        com.example.ia.entity.User facultyUser = userRepository.findByUsername(username).orElse(null);
+        String cieRole = facultyUser != null ? facultyUser.getCieRole() : null;
+
         List<CieMark> marksToSave = new ArrayList<>();
 
         for (MarkUpdateDto dto : markDtos) {
+            // Enforce CIE role restrictions (only for actual marks, skip null/empty saves)
+            if (cieRole != null && dto.getCo1() != null && dto.getIaType() != null) {
+                String iaType = dto.getIaType().toUpperCase();
+                boolean isLabType = iaType.equals("CIE3") || iaType.equals("CIE4");
+                boolean isTheoryType = !isLabType; // CIE1, CIE2, CIE5 = theory
+                if ("LAB".equals(cieRole) && isTheoryType) {
+                    return ResponseEntity.status(403).body(
+                            java.util.Map.of("message", "LAB faculty is not authorized to save " + iaType + " marks"));
+                }
+                if ("THEORY".equals(cieRole) && isLabType) {
+                    return ResponseEntity.status(403).body(
+                            java.util.Map.of("message",
+                                    "THEORY faculty is not authorized to save " + iaType + " marks"));
+                }
+            }
+
             Student student = studentRepository.findById(dto.getStudentId()).orElse(null);
             Subject subject = subjectRepository.findById(dto.getSubjectId()).orElse(null);
 

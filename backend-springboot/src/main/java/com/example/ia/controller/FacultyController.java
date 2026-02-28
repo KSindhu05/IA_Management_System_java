@@ -5,6 +5,7 @@ import com.example.ia.entity.Student;
 import com.example.ia.entity.Subject;
 import com.example.ia.entity.User;
 import com.example.ia.payload.response.FacultyClassAnalytics;
+import com.example.ia.payload.response.SubjectWithRoleDto;
 import com.example.ia.repository.FacultyAssignmentRequestRepository;
 import com.example.ia.repository.StudentRepository;
 import com.example.ia.repository.SubjectRepository;
@@ -45,7 +46,7 @@ public class FacultyController {
 
     @GetMapping("/my-subjects")
     @PreAuthorize("hasRole('FACULTY')")
-    public List<Subject> getMySubjects() {
+    public List<SubjectWithRoleDto> getMySubjects() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return facultyService.getSubjectsForFaculty(username);
     }

@@ -731,8 +731,16 @@ const FacultyDashboard = () => {
 
                 console.log('CIE Statuses:', cieStatuses);
 
-                // All CIEs are always editable (no lock logic)
-                setCieLockStatus({ cie1: false, cie2: false, cie3: false, cie4: false, cie5: false });
+                // Apply CIE role locking based on subject's cieRole
+                // cieRole: "THEORY" = CIE-1,2,5 only | "LAB" = CIE-3,4 only | null = all open
+                const cieRole = subject.cieRole || null;
+                setCieLockStatus({
+                    cie1: cieRole === 'LAB',     // LAB faculty cannot edit CIE-1
+                    cie2: cieRole === 'LAB',     // LAB faculty cannot edit CIE-2
+                    cie3: cieRole === 'THEORY',  // THEORY faculty cannot edit CIE-3
+                    cie4: cieRole === 'THEORY',  // THEORY faculty cannot edit CIE-4
+                    cie5: cieRole === 'LAB',     // LAB faculty cannot edit CIE-5 (Activities = Theory)
+                });
                 setIsLocked(false);
 
                 setMarks(newMarks);

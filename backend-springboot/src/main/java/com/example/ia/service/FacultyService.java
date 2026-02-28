@@ -6,6 +6,7 @@ import com.example.ia.entity.Student;
 import com.example.ia.entity.Subject;
 import com.example.ia.entity.User;
 import com.example.ia.payload.response.FacultyClassAnalytics;
+import com.example.ia.payload.response.SubjectWithRoleDto;
 import com.example.ia.repository.CieMarkRepository;
 import com.example.ia.repository.FacultyAssignmentRequestRepository;
 import com.example.ia.repository.StudentRepository;
@@ -122,16 +123,17 @@ public class FacultyService {
         return result;
     }
 
-    public List<Subject> getSubjectsForFaculty(String username) {
+    public List<SubjectWithRoleDto> getSubjectsForFaculty(String username) {
         User user = userRepository.findByUsername(username).orElse(null);
         if (user == null)
             return List.of();
 
-        List<Subject> result = new ArrayList<>();
+        List<SubjectWithRoleDto> result = new ArrayList<>();
         Set<Long> addedIds = new HashSet<>();
 
         // 1. Home department subjects — filter by faculty's own department
         String homeDept = user.getDepartment();
+        String homeCieRole = user.getCieRole(); // null = ALL
         if (user.getSubjects() != null && !user.getSubjects().isBlank() &&
                 homeDept != null && !homeDept.isBlank()) {
             List<String> homeSubjectNames = Arrays.stream(user.getSubjects().split(","))
@@ -139,17 +141,16 @@ public class FacultyService {
                     .filter(s -> !s.isEmpty())
                     .collect(Collectors.toList());
             if (!homeSubjectNames.isEmpty()) {
-                // Only return subjects matching both name AND faculty's department
                 List<Subject> homeSubjects = subjectRepository.findByNameInAndDepartment(
                         homeSubjectNames, homeDept);
                 for (Subject s : homeSubjects) {
                     if (addedIds.add(s.getId()))
-                        result.add(s);
+                        result.add(new SubjectWithRoleDto(s, homeCieRole));
                 }
             }
         }
 
-        // 2. Cross-department subjects — filter by each request's targetDepartment
+        // 2. Cross-department subjects — use each approved request's cieRole
         List<FacultyAssignmentRequest> approvedRequests = assignmentRequestRepository
                 .findByFacultyId(user.getId());
         for (FacultyAssignmentRequest req : approvedRequests) {
@@ -161,12 +162,11 @@ public class FacultyService {
                     .filter(s -> !s.isEmpty())
                     .collect(Collectors.toList());
             if (!crossSubjectNames.isEmpty()) {
-                // Only return subjects matching both name AND the request's target department
                 List<Subject> crossSubjects = subjectRepository.findByNameInAndDepartment(
                         crossSubjectNames, req.getTargetDepartment());
                 for (Subject s : crossSubjects) {
                     if (addedIds.add(s.getId()))
-                        result.add(s);
+                        result.add(new SubjectWithRoleDto(s, req.getCieRole()));
                 }
             }
         }
@@ -178,7 +178,7 @@ public class FacultyService {
         User user = userRepository.findByUsername(username).orElse(null);
         List<String> allowedSections = user != null ? parseSections(user) : List.of();
 
-        List<Subject> subjects = getSubjectsForFaculty(username);
+        List<SubjectWithRoleDto> subjects = getSubjectsForFaculty(username);
         double totalScore = 0;
         int scoredCount = 0;
         int low = 0;
@@ -186,7 +186,7 @@ public class FacultyService {
         Set<Long> uniqueStudents = new HashSet<>();
         List<FacultyClassAnalytics.LowPerformer> lowList = new ArrayList<>();
 
-        for (Subject sub : subjects) {
+        for (SubjectWithRoleDto sub : subjects) {
             List<CieMark> marks = cieMarkRepository.findBySubject_Id(sub.getId());
             for (CieMark mark : marks) {
                 if (mark.getStudent() == null)

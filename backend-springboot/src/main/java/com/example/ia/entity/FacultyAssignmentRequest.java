@@ -29,6 +29,9 @@ public class FacultyAssignmentRequest {
     @Column(nullable = false)
     private String status; // PENDING, APPROVED, REJECTED
 
+    // CIE role for split subjects: THEORY (CIE-1,2,5), LAB (CIE-3,4), or null (ALL)
+    private String cieRole;
+
     private LocalDateTime requestDate;
 
     private LocalDateTime responseDate;
@@ -97,6 +100,14 @@ public class FacultyAssignmentRequest {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getCieRole() {
+        return cieRole;
+    }
+
+    public void setCieRole(String cieRole) {
+        this.cieRole = cieRole;
     }
 
     public LocalDateTime getRequestDate() {

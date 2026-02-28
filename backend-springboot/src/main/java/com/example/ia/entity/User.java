@@ -34,6 +34,9 @@ public class User {
     @Column(columnDefinition = "TEXT")
     private String subjects;
 
+    // CIE role for split subjects: THEORY (CIE-1,2,5), LAB (CIE-3,4), or null (ALL)
+    private String cieRole;
+
     public Long getId() {
         return id;
     }
@@ -120,5 +123,13 @@ public class User {
 
     public void setSubjects(String subjects) {
         this.subjects = subjects;
+    }
+
+    public String getCieRole() {
+        return cieRole;
+    }
+
+    public void setCieRole(String cieRole) {
+        this.cieRole = cieRole;
     }
 }

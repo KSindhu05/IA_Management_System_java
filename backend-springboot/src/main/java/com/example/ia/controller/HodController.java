@@ -308,6 +308,7 @@ public class HodController {
             facMap.put("semester", fac.getSemester());
             facMap.put("section", fac.getSection());
             facMap.put("role", fac.getRole());
+            facMap.put("cieRole", fac.getCieRole()); // THEORY, LAB, or null
 
             // Filter subjects: only keep subjects that belong to this department
             String filteredSubjects = "";
@@ -453,6 +454,8 @@ public class HodController {
         faculty.setSubjects(facultyData.getSubjects());
         faculty.setRole("FACULTY");
         faculty.setPassword(passwordEncoder.encode("password"));
+        if (facultyData.getCieRole() != null)
+            faculty.setCieRole(facultyData.getCieRole());
         userRepository.save(faculty);
         return ResponseEntity.ok(faculty);
     }
@@ -486,6 +489,13 @@ public class HodController {
                 faculty.setSubjects(facultyData.getSubjects());
             if (facultyData.getDepartment() != null)
                 faculty.setDepartment(facultyData.getDepartment());
+            // cieRole can be set to null (ALL) or THEORY/LAB — always update if field is
+            // present
+            // Use empty string to mean "clear" (set to null = ALL)
+            if (facultyData.getCieRole() != null) {
+                String role = facultyData.getCieRole().isBlank() ? null : facultyData.getCieRole();
+                faculty.setCieRole(role);
+            }
             userRepository.save(faculty);
             return ResponseEntity.ok(faculty);
         }).orElse(ResponseEntity.notFound().build());
