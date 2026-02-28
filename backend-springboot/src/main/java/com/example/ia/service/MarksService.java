@@ -53,11 +53,11 @@ public class MarksService {
 
             if (existing.isPresent()) {
                 CieMark mark = existing.get();
-                // If the frontend sends -1, it means the user explicitly cleared the field.
+                // If the frontend sends < 0, it means the user explicitly cleared the field.
                 // If it sends null, it means the field was untouched and shouldn't be
                 // overwritten.
                 if (payload.getMarks() != null) {
-                    if (payload.getMarks() == -1) {
+                    if (payload.getMarks() < 0) {
                         mark.setMarks(null);
                     } else {
                         mark.setMarks(payload.getMarks());
@@ -66,7 +66,7 @@ public class MarksService {
 
                 // Persist or clear attendance
                 if (payload.getAttendancePercentage() != null) {
-                    if (payload.getAttendancePercentage() == -1) {
+                    if (payload.getAttendancePercentage() < 0) {
                         mark.setAttendancePercentage(null);
                     } else {
                         mark.setAttendancePercentage(payload.getAttendancePercentage());
@@ -80,11 +80,11 @@ public class MarksService {
                 }
                 cieMarkRepository.save(mark);
             } else {
-                // For new records, convert explicit clears (-1) to null
-                if (payload.getMarks() != null && payload.getMarks() == -1) {
+                // For new records, convert explicit clears (< 0) to null
+                if (payload.getMarks() != null && payload.getMarks() < 0) {
                     payload.setMarks(null);
                 }
-                if (payload.getAttendancePercentage() != null && payload.getAttendancePercentage() == -1) {
+                if (payload.getAttendancePercentage() != null && payload.getAttendancePercentage() < 0) {
                     payload.setAttendancePercentage(null);
                 }
 
