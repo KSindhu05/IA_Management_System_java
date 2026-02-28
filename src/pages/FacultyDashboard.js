@@ -908,6 +908,10 @@ const FacultyDashboard = () => {
 
     const handleSubmitForApproval = async () => {
         // Use the currently selected CIE type
+        if (selectedCieType === 'all') {
+            showToast('Please select a specific CIE (e.g., CIE-1) to submit for approval.', 'error');
+            return;
+        }
         const cieType = selectedCieType.toUpperCase();
 
         if (!window.confirm(`Submit ${cieType} marks + attendance to HOD for approval?`)) return;
@@ -1948,6 +1952,22 @@ const FacultyDashboard = () => {
 
                 <div className={styles.sectionHeader}>
                     <div className={styles.headerTitleGroup}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginRight: '1rem' }}>
+                            <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>View:</span>
+                            <select
+                                className={styles.deptSelect}
+                                value={selectedCieType}
+                                onChange={(e) => setSelectedCieType(e.target.value)}
+                                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}
+                            >
+                                <option value="cie1">CIE-1</option>
+                                <option value="cie2">CIE-2</option>
+                                <option value="cie3">CIE-3</option>
+                                <option value="cie4">CIE-4</option>
+                                <option value="cie5">CIE-5</option>
+                                <option value="all">All CIEs & Attendance</option>
+                            </select>
+                        </div>
                         {facultySections.length > 1 && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>Section Filter:</span>
@@ -2008,12 +2028,6 @@ const FacultyDashboard = () => {
 
 
                 <div className={styles.card}>
-                    <style>{`
-                        @keyframes scrollRemarks {
-                            0% { transform: translateX(100%); }
-                            100% { transform: translateX(-100%); }
-                        }
-                    `}</style>
                     <div className={styles.tableContainer}>
                         <div className={styles.tableWrapper}>
                             <table className={styles.table}>
@@ -2022,18 +2036,18 @@ const FacultyDashboard = () => {
                                         <th>Sl No</th>
                                         <th>Reg No</th>
                                         <th>Student Name</th>
-                                        <th style={selectedCieType === 'cie1' ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-1 (50)</th>
-                                        {selectedCieType === 'cie1' && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
-                                        <th style={selectedCieType === 'cie2' ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-2 (50)</th>
-                                        {selectedCieType === 'cie2' && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
-                                        <th style={selectedCieType === 'cie3' ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-3 (50)</th>
-                                        {selectedCieType === 'cie3' && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
-                                        <th style={selectedCieType === 'cie4' ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-4 (50)</th>
-                                        {selectedCieType === 'cie4' && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
-                                        <th style={selectedCieType === 'cie5' ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-5 (50)</th>
-                                        {selectedCieType === 'cie5' && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
+                                        <th style={['cie1', 'all'].includes(selectedCieType) ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-1 (50)</th>
+                                        {['cie1', 'all'].includes(selectedCieType) && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
+                                        <th style={['cie2', 'all'].includes(selectedCieType) ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-2 (50)</th>
+                                        {['cie2', 'all'].includes(selectedCieType) && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
+                                        <th style={['cie3', 'all'].includes(selectedCieType) ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-3 (50)</th>
+                                        {['cie3', 'all'].includes(selectedCieType) && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
+                                        <th style={['cie4', 'all'].includes(selectedCieType) ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-4 (50)</th>
+                                        {['cie4', 'all'].includes(selectedCieType) && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
+                                        <th style={['cie5', 'all'].includes(selectedCieType) ? { background: '#eff6ff', color: '#1d4ed8' } : {}}>CIE-5 (50)</th>
+                                        {['cie5', 'all'].includes(selectedCieType) && <th style={{ background: '#f0fdf4', color: '#15803d' }}>Att (%)</th>}
                                         <th>Total (250)</th>
-                                        {/* <th style={{ background: '#fefce8', color: '#a16207', width: '150px', minWidth: '150px' }}>Remarks</th> */}
+                                        <th style={{ background: '#fefce8', color: '#a16207', width: '250px', minWidth: '250px' }}>Remarks</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2056,7 +2070,7 @@ const FacultyDashboard = () => {
                                             const valCIE5 = sMarks.cie5 !== undefined ? sMarks.cie5 : '';
 
                                             const renderAttendanceCell = (cieKey) => {
-                                                if (selectedCieType !== cieKey) return null;
+                                                if (selectedCieType !== cieKey && selectedCieType !== 'all') return null;
                                                 const attField = cieKey + 'Att';
                                                 return (
                                                     <td style={{ background: '#f0fdf4' }}>
@@ -2079,98 +2093,124 @@ const FacultyDashboard = () => {
                                                     <td>{index + 1}</td>
                                                     <td style={{ whiteSpace: 'nowrap' }}>{student.rollNo || student.regNo}</td>
                                                     <td style={{ whiteSpace: 'nowrap' }}>{student.name}</td>
-                                                    <td style={selectedCieType === 'cie1' ? { background: '#eff6ff' } : {}}>
+                                                    <td style={['cie1', 'all'].includes(selectedCieType) ? { background: '#eff6ff' } : {}}>
                                                         <input
                                                             type="number"
                                                             className={styles.markInput}
                                                             value={valCIE1}
                                                             onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
-                                                            onFocus={() => setSelectedCieType('cie1')}
+                                                            onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie1') }}
                                                             placeholder=""
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie1')}
-                                                    <td style={selectedCieType === 'cie2' ? { background: '#eff6ff' } : {}}>
+                                                    <td style={['cie2', 'all'].includes(selectedCieType) ? { background: '#eff6ff' } : {}}>
                                                         <input
                                                             type="number"
                                                             className={styles.markInput}
                                                             value={valCIE2}
                                                             onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
-                                                            onFocus={() => setSelectedCieType('cie2')}
+                                                            onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie2') }}
                                                             placeholder=""
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie2')}
-                                                    <td style={selectedCieType === 'cie3' ? { background: '#eff6ff' } : {}}>
+                                                    <td style={['cie3', 'all'].includes(selectedCieType) ? { background: '#eff6ff' } : {}}>
                                                         <input
                                                             type="number"
                                                             className={styles.markInput}
                                                             value={valCIE3}
                                                             onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
-                                                            onFocus={() => setSelectedCieType('cie3')}
+                                                            onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie3') }}
                                                             placeholder=""
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie3')}
-                                                    <td style={selectedCieType === 'cie4' ? { background: '#eff6ff' } : {}}>
+                                                    <td style={['cie4', 'all'].includes(selectedCieType) ? { background: '#eff6ff' } : {}}>
                                                         <input
                                                             type="number"
                                                             className={styles.markInput}
                                                             value={valCIE4}
                                                             onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
-                                                            onFocus={() => setSelectedCieType('cie4')}
+                                                            onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie4') }}
                                                             placeholder=""
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie4')}
-                                                    <td style={selectedCieType === 'cie5' ? { background: '#eff6ff' } : {}}>
+                                                    <td style={['cie5', 'all'].includes(selectedCieType) ? { background: '#eff6ff' } : {}}>
                                                         <input
                                                             type="number"
                                                             className={styles.markInput}
                                                             value={valCIE5}
                                                             onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
-                                                            onFocus={() => setSelectedCieType('cie5')}
+                                                            onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie5') }}
                                                             placeholder=""
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie5')}
                                                     <td style={{ fontWeight: 'bold' }}>{calculateAverage(student)}</td>
-                                                    {/* {(() => {
-                                                    const getCieRemark = (key, label) => {
-                                                        const v = sMarks[key] !== undefined && sMarks[key] !== '' ? parseFloat(sMarks[key]) : null;
-                                                        const a = sMarks[key + 'Att'] !== undefined && sMarks[key + 'Att'] !== '' ? parseFloat(sMarks[key + 'Att']) : null;
-                                                        if (v == null || isNaN(v) || a == null || isNaN(a)) return null;
-                                                        if (v < 25 && a < 75) return { text: `${label}: Low Marks, Low Att`, severity: 3 };
-                                                        if (v < 25) return { text: `${label}: Low Marks`, severity: 2 };
-                                                        if (a < 75) return { text: `${label}: Low Att`, severity: 2 };
-                                                        if (v >= 40 && a >= 75) return { text: `${label}: Excellent`, severity: 0 };
-                                                        return { text: `${label}: Good`, severity: 0 };
-                                                    };
-                                                    const allCies = [
-                                                        getCieRemark('cie1', 'CIE-1'), getCieRemark('cie2', 'CIE-2'),
-                                                        getCieRemark('cie3', 'CIE-3'), getCieRemark('cie4', 'CIE-4'),
-                                                        getCieRemark('cie5', 'CIE-5')
-                                                    ];
-                                                    const filled = allCies.filter(r => r !== null);
-                                                    // If all 5 are filled, show combined
-                                                    if (filled.length === 5) {
-                                                        const worst = Math.max(...filled.map(r => r.severity));
-                                                        const color = worst >= 3 ? '#dc2626' : worst >= 2 ? '#ea580c' : '#15803d';
-                                                        const bg = worst >= 3 ? '#fef2f2' : worst >= 2 ? '#fff7ed' : '#f0fdf4';
-                                                        const text = filled.map(r => r.text).join(' | ');
-                                                        return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: bg }}>
-                                                            <div style={{ display: 'inline-block', whiteSpace: 'nowrap', fontSize: '0.65rem', fontWeight: 600, color, padding: '8px 4px', animation: 'scrollRemarks 12s linear infinite' }}>{text}</div>
+                                                    {(() => {
+                                                        const getCieRemark = (key, label) => {
+                                                            const v = sMarks[key] !== undefined && sMarks[key] !== '' ? parseFloat(sMarks[key]) : null;
+                                                            const a = sMarks[key + 'Att'] !== undefined && sMarks[key + 'Att'] !== '' ? parseFloat(sMarks[key + 'Att']) : null;
+                                                            if (v == null || isNaN(v) || a == null || isNaN(a)) return null;
+
+                                                            return {
+                                                                label,
+                                                                lowMarks: v < 25,
+                                                                lowAtt: a < 75,
+                                                                excellent: v >= 40 && a >= 75,
+                                                                severity: (v < 25 && a < 75) ? 3 : (v < 25 ? 2 : (a < 75 ? 2 : 0)),
+                                                                text: (v < 25 && a < 75) ? `${label}: Low Marks, Low Att` :
+                                                                    (v < 25 ? `${label}: Low Marks` :
+                                                                        (a < 75 ? `${label}: Low Att` :
+                                                                            (v >= 40 && a >= 75 ? `${label}: Excellent` : `${label}: Good`)))
+                                                            };
+                                                        };
+                                                        const allCies = [
+                                                            getCieRemark('cie1', 'CIE-1'), getCieRemark('cie2', 'CIE-2'),
+                                                            getCieRemark('cie3', 'CIE-3'), getCieRemark('cie4', 'CIE-4'),
+                                                            getCieRemark('cie5', 'CIE-5')
+                                                        ];
+                                                        const filled = allCies.filter(r => r !== null);
+
+                                                        // If all is selected, show combined remarks for filled ones.
+                                                        if (selectedCieType === 'all' && filled.length > 0) {
+                                                            const worst = Math.max(...filled.map(r => r.severity));
+                                                            const color = worst >= 3 ? '#dc2626' : worst >= 2 ? '#ea580c' : '#15803d';
+                                                            const bg = worst >= 3 ? '#fef2f2' : worst >= 2 ? '#fff7ed' : '#f0fdf4';
+
+                                                            const lowMarksCies = filled.filter(r => r.lowMarks).map(r => r.label);
+                                                            const lowAttCies = filled.filter(r => r.lowAtt).map(r => r.label);
+
+                                                            let textParts = [];
+                                                            if (lowMarksCies.length > 0) {
+                                                                textParts.push(`${lowMarksCies.join(',')} Low Marks`);
+                                                            }
+                                                            if (lowAttCies.length > 0) {
+                                                                textParts.push(`${lowAttCies.join(',')} Low Att`);
+                                                            }
+                                                            if (textParts.length === 0) {
+                                                                const allExcellent = filled.every(r => r.excellent);
+                                                                textParts.push(allExcellent ? 'All Excellent' : 'All Good');
+                                                            }
+                                                            const text = textParts.join(' | ');
+                                                            return <td style={{ width: '250px', minWidth: '250px', padding: '8px 4px', background: bg }}>
+                                                                <div style={{ fontSize: '0.65rem', fontWeight: 600, color, whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.4' }}>{text}</div>
+                                                            </td>;
+                                                        } else if (selectedCieType === 'all' && filled.length === 0) {
+                                                            return <td style={{ width: '250px', minWidth: '250px', padding: 0 }}><div style={{ fontSize: '0.72rem', color: '#94a3b8', padding: '8px 4px' }}>-</div></td>;
+                                                        }
+
+                                                        // Otherwise show focused CIE's remark
+                                                        const focused = getCieRemark(selectedCieType, selectedCieType.replace('cie', 'CIE-'));
+                                                        if (!focused) return <td style={{ width: '250px', minWidth: '250px', padding: 0 }}><div style={{ fontSize: '0.72rem', color: '#94a3b8', padding: '8px 4px' }}>-</div></td>;
+                                                        const color = focused.severity >= 3 ? '#dc2626' : focused.severity >= 2 ? '#ea580c' : focused.severity === 0 ? '#15803d' : '#2563eb';
+                                                        const bg = focused.severity >= 3 ? '#fef2f2' : focused.severity >= 2 ? '#fff7ed' : '#f0fdf4';
+                                                        return <td style={{ width: '250px', minWidth: '250px', padding: '8px 4px', background: bg }}>
+                                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color, whiteSpace: 'normal', wordWrap: 'break-word', lineHeight: '1.4' }}>{focused.text}</div>
                                                         </td>;
-                                                    }
-                                                    // Otherwise show focused CIE's remark
-                                                    const focused = getCieRemark(selectedCieType, selectedCieType.replace('cie', 'CIE-'));
-                                                    if (!focused) return <td style={{ width: '150px', minWidth: '150px', padding: 0 }}><div style={{ fontSize: '0.72rem', color: '#94a3b8', padding: '8px 4px' }}>-</div></td>;
-                                                    const color = focused.severity >= 3 ? '#dc2626' : focused.severity >= 2 ? '#ea580c' : focused.severity === 0 ? '#15803d' : '#2563eb';
-                                                    const bg = focused.severity >= 3 ? '#fef2f2' : focused.severity >= 2 ? '#fff7ed' : '#f0fdf4';
-                                                    return <td style={{ width: '150px', minWidth: '150px', overflow: 'hidden', padding: 0, background: bg }}>
-                                                        <div style={{ display: 'inline-block', whiteSpace: 'nowrap', fontSize: '0.72rem', fontWeight: 600, color, padding: '8px 4px', animation: focused.text.length > 20 ? 'scrollRemarks 12s linear infinite' : 'none' }}>{focused.text}</div>
-                                                    </td>;
-                                                })()} */}
+                                                    })()}
                                                 </tr>
                                             )
                                         })}
