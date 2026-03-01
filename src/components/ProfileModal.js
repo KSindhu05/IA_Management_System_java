@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
 import { X, User, Lock, Eye, EyeOff, Save, Shield } from 'lucide-react';
 import styles from './ProfileModal.module.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
 
 const ProfileModal = ({ onClose }) => {
     const { user } = useAuth();
