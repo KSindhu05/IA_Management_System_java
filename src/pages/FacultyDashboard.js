@@ -746,11 +746,11 @@ const FacultyDashboard = () => {
                 }
 
                 setCieLockStatus({
-                    cie1: role === 'LAB',     // LAB faculty cannot edit CIE-1
-                    cie2: role === 'LAB',     // LAB faculty cannot edit CIE-2
-                    cie3: role === 'THEORY',  // THEORY faculty cannot edit CIE-3
-                    cie4: role === 'THEORY',  // THEORY faculty cannot edit CIE-4
-                    cie5: role === 'LAB',     // LAB faculty cannot edit CIE-5 (Activities = Theory)
+                    cie1: role === 'LAB' || cieStatuses.cie1.has('SUBMITTED') || cieStatuses.cie1.has('APPROVED'),
+                    cie2: role === 'LAB' || cieStatuses.cie2.has('SUBMITTED') || cieStatuses.cie2.has('APPROVED'),
+                    cie3: role === 'THEORY' || cieStatuses.cie3.has('SUBMITTED') || cieStatuses.cie3.has('APPROVED'),
+                    cie4: role === 'THEORY' || cieStatuses.cie4.has('SUBMITTED') || cieStatuses.cie4.has('APPROVED'),
+                    cie5: role === 'LAB' || cieStatuses.cie5.has('SUBMITTED') || cieStatuses.cie5.has('APPROVED'),
                 });
                 setIsLocked(false);
 
@@ -955,7 +955,7 @@ const FacultyDashboard = () => {
 
             if (res.ok) {
                 showToast(`Marks for ${cieType} submitted to HOD!`, 'success');
-                setIsLocked(true);
+                setCieLockStatus(prev => ({ ...prev, [selectedCieType]: true }));
             } else {
                 const err = await res.text();
                 showToast('Submission failed: ' + err, 'error');

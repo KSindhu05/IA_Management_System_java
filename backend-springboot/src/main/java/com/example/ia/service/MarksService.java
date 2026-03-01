@@ -134,7 +134,7 @@ public class MarksService {
         }
         return cieMarkRepository.findByStudent_Id(student.getId())
                 .stream()
-                .filter(m -> !"PENDING".equalsIgnoreCase(m.getStatus()))
+                .filter(m -> "APPROVED".equalsIgnoreCase(m.getStatus()))
                 .collect(java.util.stream.Collectors.toList());
     }
 
