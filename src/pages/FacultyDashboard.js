@@ -2411,7 +2411,8 @@ const FacultyDashboard = () => {
                                                             placeholder=""
                                                             min="0"
                                                             max="100"
-                                                            style={{ background: '#f0fdf4', border: '1px solid #86efac' }}
+                                                            disabled={cieLockStatus[cieKey]}
+                                                            style={{ background: cieLockStatus[cieKey] ? '#e5e7eb' : '#f0fdf4', border: '1px solid #86efac' }}
                                                         />
                                                     </td>
                                                 );
@@ -2430,6 +2431,8 @@ const FacultyDashboard = () => {
                                                             onChange={(e) => handleMarkChange(student.id, 'cie1', e.target.value)}
                                                             onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie1') }}
                                                             placeholder=""
+                                                            disabled={cieLockStatus.cie1}
+                                                            style={cieLockStatus.cie1 ? { background: '#e5e7eb', cursor: 'not-allowed' } : {}}
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie1')}
@@ -2441,6 +2444,8 @@ const FacultyDashboard = () => {
                                                             onChange={(e) => handleMarkChange(student.id, 'cie2', e.target.value)}
                                                             onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie2') }}
                                                             placeholder=""
+                                                            disabled={cieLockStatus.cie2}
+                                                            style={cieLockStatus.cie2 ? { background: '#e5e7eb', cursor: 'not-allowed' } : {}}
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie2')}
@@ -2452,6 +2457,8 @@ const FacultyDashboard = () => {
                                                             onChange={(e) => handleMarkChange(student.id, 'cie3', e.target.value)}
                                                             onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie3') }}
                                                             placeholder=""
+                                                            disabled={cieLockStatus.cie3}
+                                                            style={cieLockStatus.cie3 ? { background: '#e5e7eb', cursor: 'not-allowed' } : {}}
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie3')}
@@ -2463,6 +2470,8 @@ const FacultyDashboard = () => {
                                                             onChange={(e) => handleMarkChange(student.id, 'cie4', e.target.value)}
                                                             onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie4') }}
                                                             placeholder=""
+                                                            disabled={cieLockStatus.cie4}
+                                                            style={cieLockStatus.cie4 ? { background: '#e5e7eb', cursor: 'not-allowed' } : {}}
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie4')}
@@ -2474,6 +2483,8 @@ const FacultyDashboard = () => {
                                                             onChange={(e) => handleMarkChange(student.id, 'cie5', e.target.value)}
                                                             onFocus={() => { if (selectedCieType !== 'all') setSelectedCieType('cie5') }}
                                                             placeholder=""
+                                                            disabled={cieLockStatus.cie5}
+                                                            style={cieLockStatus.cie5 ? { background: '#e5e7eb', cursor: 'not-allowed' } : {}}
                                                         />
                                                     </td>
                                                     {renderAttendanceCell('cie5')}
