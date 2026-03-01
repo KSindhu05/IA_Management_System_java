@@ -374,6 +374,11 @@ const FacultyDashboard = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [csvCieType, setCsvCieType] = useState('CIE1');
+    const [csvData, setCsvData] = useState([]);
+    const [csvErrors, setCsvErrors] = useState([]);
+    const [csvFile, setCsvFile] = useState(null);
+    const [csvUploading, setCsvUploading] = useState(false);
 
     // Low Performer Filters
     const [filterSubject, setFilterSubject] = useState('All');
@@ -1192,33 +1197,320 @@ const FacultyDashboard = () => {
         );
     };
 
-    // --- NEW FEATURE: UPLOAD MODAL ---
+    // --- CSV BULK UPLOAD FUNCTIONS ---
+    const downloadCsvTemplate = () => {
+        if (!selectedSubject) {
+            showToast('Please select a subject first', 'error');
+            return;
+        }
+        const headers = ['RegNo', 'StudentName', 'Marks', 'Attendance'];
+        const subjectStudents = students.filter(s =>
+            String(s.semester) === String(selectedSubject.semester) &&
+            s.department === selectedSubject.department &&
+            (facultySections.length === 0 || facultySections.includes(s.section))
+        );
+        const rows = subjectStudents.map(s => [
+            s.regNo || s.rollNo || '',
+            `"${(s.name || '').replace(/"/g, '""')}"`,
+            '',
+            ''
+        ]);
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `CIE_Template_${(selectedSubject.name || 'Subject').replace(/[^a-zA-Z0-9]/g, '_')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showToast('Template downloaded!', 'success');
+    };
+
+    const handleCsvFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setCsvFile(file);
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            // Strip ALL BOM/invisible chars and normalize line endings
+            const text = evt.target.result
+                .replace(/\uFEFF/g, '')              // Strip ALL BOM characters
+                .replace(/[\u200B-\u200D\u2060]/g, '') // Strip zero-width chars
+                .replace(/\r\n/g, '\n')               // Normalize CRLF
+                .replace(/\r/g, '\n');                 // Normalize bare CR
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            if (lines.length < 1) {
+                setCsvErrors([{ row: 0, message: 'CSV file is empty or has no data rows' }]);
+                setCsvData([]);
+                return;
+            }
+
+            // Auto-detect: is line 0 a header or data?
+            // If the first column starts with a digit, treat it as data (RegNo like 459CE25001)
+            const firstCol = lines[0].split(',')[0].replace(/[^\w]/g, '').trim();
+            const hasHeader = firstCol.length > 0 && !/^\d/.test(firstCol);
+            const dataStartIndex = hasHeader ? 1 : 0;
+
+            // Build student lookup by regNo
+            const subjectStudents = students.filter(s =>
+                String(s.semester) === String(selectedSubject.semester) &&
+                s.department === selectedSubject.department &&
+                (facultySections.length === 0 || facultySections.includes(s.section))
+            );
+            const studentMap = {};
+            subjectStudents.forEach(s => {
+                const key = (s.regNo || s.rollNo || '').replace(/[^\w]/g, '').trim().toLowerCase();
+                if (key) studentMap[key] = s;
+            });
+
+            const parsed = [];
+            const errors = [];
+
+            for (let i = dataStartIndex; i < lines.length; i++) {
+                // Simple CSV parse (handles quoted fields)
+                const cols = [];
+                let current = '';
+                let inQuotes = false;
+                for (let c = 0; c < lines[i].length; c++) {
+                    const ch = lines[i][c];
+                    if (ch === '"') { inQuotes = !inQuotes; }
+                    else if (ch === ',' && !inQuotes) { cols.push(current.trim()); current = ''; }
+                    else { current += ch; }
+                }
+                cols.push(current.trim());
+
+                // Clean RegNo: strip any leftover invisible/control chars
+                const regNo = (cols[0] || '').replace(/[^\w]/g, '').trim();
+                const name = (cols[1] || '').trim();
+                const marksStr = (cols[2] || '').trim();
+                const attStr = (cols[3] || '').trim();
+
+                if (!regNo) {
+                    errors.push({ row: i, message: `Row ${i}: Missing RegNo` });
+                    continue;
+                }
+
+                const student = studentMap[regNo.toLowerCase()];
+                if (!student) {
+                    errors.push({ row: i, message: `Row ${i}: RegNo "${regNo}" not found in student list` });
+                    parsed.push({ regNo, name, marksStr, attStr, studentId: null, valid: false, errorMsg: 'Student not found' });
+                    continue;
+                }
+
+                // Validate marks
+                let marksVal = null;
+                let marksError = null;
+                if (marksStr.toLowerCase() === 'ab') {
+                    marksVal = 0; // Absent = 0
+                } else if (marksStr === '') {
+                    marksVal = null; // Skip
+                } else {
+                    const num = parseFloat(marksStr);
+                    if (isNaN(num)) {
+                        marksError = `Invalid marks "${marksStr}"`;
+                    } else if (num < 0 || num > 50) {
+                        marksError = `Marks ${num} out of range (0-50)`;
+                    } else {
+                        marksVal = num;
+                    }
+                }
+
+                // Validate attendance
+                let attVal = null;
+                let attError = null;
+                if (attStr === '') {
+                    attVal = null; // Skip
+                } else {
+                    const num = parseFloat(attStr);
+                    if (isNaN(num)) {
+                        attError = `Invalid attendance "${attStr}"`;
+                    } else if (num < 0 || num > 100) {
+                        attError = `Attendance ${num} out of range (0-100)`;
+                    } else {
+                        attVal = num;
+                    }
+                }
+
+                if (marksError || attError) {
+                    const msg = [marksError, attError].filter(Boolean).join('; ');
+                    errors.push({ row: i, message: `Row ${i} (${regNo}): ${msg}` });
+                    parsed.push({ regNo, name: student.name, marksStr, attStr, studentId: student.id, valid: false, errorMsg: msg, marks: marksVal, attendance: attVal });
+                } else {
+                    parsed.push({ regNo, name: student.name, marksStr, attStr, studentId: student.id, valid: true, marks: marksVal, attendance: attVal });
+                }
+            }
+
+            setCsvData(parsed);
+            setCsvErrors(errors);
+        };
+        reader.readAsText(file);
+    };
+
+    const handleCsvUpload = () => {
+        if (!selectedSubject) {
+            showToast('No subject selected', 'error');
+            return;
+        }
+        const validRows = csvData.filter(r => r.valid && r.studentId);
+        if (validRows.length === 0) {
+            showToast('No valid rows to upload', 'error');
+            return;
+        }
+
+        // Only update local marks state — user must click "Save Draft" to persist
+        const cieKey = csvCieType.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        setMarks(prev => {
+            const updated = { ...prev };
+            validRows.forEach(r => {
+                if (!updated[r.studentId]) {
+                    updated[r.studentId] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', cie1Att: '', cie2Att: '', cie3Att: '', cie4Att: '', cie5Att: '' };
+                }
+                if (r.marks !== null) updated[r.studentId][cieKey] = r.marks;
+                if (r.attendance !== null) updated[r.studentId][cieKey + 'Att'] = r.attendance;
+            });
+            return updated;
+        });
+
+        showToast(`${validRows.length} marks loaded for ${csvCieType}. Click "Save Draft" to save!`, 'success');
+        setShowUploadModal(false);
+        setCsvData([]);
+        setCsvErrors([]);
+        setCsvFile(null);
+    };
+
+    // --- UPLOAD MODAL ---
     const renderUploadModal = () => {
         if (!showUploadModal) return null;
 
+        const validCount = csvData.filter(r => r.valid).length;
+        const invalidCount = csvData.filter(r => !r.valid).length;
+
         return (
-            <div className={styles.modalOverlay} onClick={() => setShowUploadModal(false)}>
-                <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalOverlay} onClick={() => { setShowUploadModal(false); setCsvData([]); setCsvErrors([]); setCsvFile(null); }}>
+                <div className={styles.modalContent} style={{ maxWidth: '750px', maxHeight: '85vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
                     <div className={styles.modalHeader}>
-                        <h2>Bulk Upload Marks</h2>
-                        <button className={styles.closeBtn} onClick={() => setShowUploadModal(false)}>
+                        <h2>📤 Bulk Upload CIE Marks</h2>
+                        <button className={styles.closeBtn} onClick={() => { setShowUploadModal(false); setCsvData([]); setCsvErrors([]); setCsvFile(null); }}>
                             <X size={20} />
                         </button>
                     </div>
                     <div className={styles.modalBody}>
-                        <div className={styles.uploadArea} onClick={() => {
-                            showToast('File Upload Simulation Success');
-                            setShowUploadModal(false);
-                        }}>
-                            <Upload size={48} color="#2563eb" />
-                            <div>
-                                <p className={styles.uploadText}>Click to upload or drag and drop</p>
-                                <p className={styles.uploadSubtext}>Excel, CSV files only (Max 2MB)</p>
+                        {/* Step 1: CIE Type Selector */}
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>Select CIE Type *</label>
+                            <div className={styles.csvCieSelector}>
+                                {['CIE1', 'CIE2', 'CIE3', 'CIE4', 'CIE5'].map(cie => (
+                                    <button
+                                        key={cie}
+                                        className={`${styles.csvCieBtn} ${csvCieType === cie ? styles.csvCieBtnActive : ''}`}
+                                        onClick={() => setCsvCieType(cie)}
+                                    >
+                                        {cie.replace('CIE', 'CIE-')}
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                        <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button className={styles.secondaryBtn} onClick={() => setShowUploadModal(false)}>Cancel</button>
-                            <button className={styles.saveBtn} disabled>Upload Pending...</button>
+
+                        {/* Step 2: Template Download */}
+                        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f0f9ff', borderRadius: '10px', border: '1px solid #bae6fd' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <p style={{ fontWeight: 600, color: '#0369a1', margin: 0, fontSize: '0.9rem' }}>📋 Download Template</p>
+                                    <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0.25rem 0 0 0' }}>CSV with RegNo, StudentName, Marks, Attendance columns</p>
+                                </div>
+                                <button className={styles.csvTemplateBtn} onClick={downloadCsvTemplate}>
+                                    <Download size={16} /> Template
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Step 3: File Upload */}
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>Upload CSV File</label>
+                            <div className={styles.uploadArea} onClick={() => document.getElementById('csvFileInput').click()}>
+                                <Upload size={36} color="#2563eb" />
+                                <div>
+                                    <p className={styles.uploadText}>{csvFile ? csvFile.name : 'Click to select CSV file'}</p>
+                                    <p className={styles.uploadSubtext}>CSV format only • Marks (0-50) • Attendance (0-100%)</p>
+                                </div>
+                            </div>
+                            <input
+                                id="csvFileInput"
+                                type="file"
+                                accept=".csv"
+                                style={{ display: 'none' }}
+                                onChange={handleCsvFileChange}
+                            />
+                        </div>
+
+                        {/* Step 4: Preview Table */}
+                        {csvData.length > 0 && (
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                    <h4 style={{ margin: 0, color: '#1e293b' }}>Preview ({csvData.length} rows)</h4>
+                                    <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem' }}>
+                                        <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ {validCount} valid</span>
+                                        {invalidCount > 0 && <span style={{ color: '#dc2626', fontWeight: 600 }}>✗ {invalidCount} errors</span>}
+                                    </div>
+                                </div>
+                                <div className={styles.csvPreviewWrapper}>
+                                    <table className={styles.csvPreviewTable}>
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>RegNo</th>
+                                                <th>Name</th>
+                                                <th>Marks</th>
+                                                <th>Attendance</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {csvData.map((row, idx) => (
+                                                <tr key={idx} className={row.valid ? styles.csvValidRow : styles.csvErrorRow}>
+                                                    <td>{idx + 1}</td>
+                                                    <td>{row.regNo}</td>
+                                                    <td>{row.name}</td>
+                                                    <td>{row.marksStr || '—'}</td>
+                                                    <td>{row.attStr || '—'}</td>
+                                                    <td>
+                                                        {row.valid
+                                                            ? <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Valid</span>
+                                                            : <span style={{ color: '#dc2626', fontSize: '0.8rem' }} title={row.errorMsg}>✗ {row.errorMsg}</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Error Summary */}
+                        {csvErrors.length > 0 && (
+                            <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #fecaca' }}>
+                                <p style={{ fontWeight: 600, color: '#991b1b', margin: '0 0 0.5rem 0', fontSize: '0.85rem' }}>⚠️ {csvErrors.length} Error(s):</p>
+                                <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.8rem', color: '#b91c1c' }}>
+                                    {csvErrors.slice(0, 5).map((err, i) => <li key={i}>{err.message}</li>)}
+                                    {csvErrors.length > 5 && <li>...and {csvErrors.length - 5} more</li>}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
+                            <button className={styles.secondaryBtn} onClick={() => { setShowUploadModal(false); setCsvData([]); setCsvErrors([]); setCsvFile(null); }}>Cancel</button>
+                            <button
+                                className={styles.saveBtn}
+                                disabled={csvData.filter(r => r.valid).length === 0}
+                                onClick={handleCsvUpload}
+                            >
+                                {`Load ${validCount} Marks (${csvCieType.replace('CIE', 'CIE-')})`}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2052,6 +2344,10 @@ const FacultyDashboard = () => {
 
                             <button className={`${styles.saveBtn}`} onClick={downloadCSV} style={{ backgroundColor: '#4b5563' }}>
                                 <Download size={16} /> Download
+                            </button>
+
+                            <button className={`${styles.saveBtn}`} onClick={() => setShowUploadModal(true)} style={{ backgroundColor: '#7c3aed' }}>
+                                <Upload size={16} /> Bulk Upload
                             </button>
                         </div>
                     </div>
