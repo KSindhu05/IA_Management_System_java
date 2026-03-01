@@ -4,10 +4,10 @@ import com.example.ia.entity.User;
 import com.example.ia.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,11 +24,9 @@ public class ProfileController {
 
     // GET /api/profile — returns full user details
     @GetMapping
-    public ResponseEntity<?> getProfile(Principal principal) {
-        if (principal == null) {
-            return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
-        }
-        User user = userRepository.findByUsername(principal.getName()).orElse(null);
+    public ResponseEntity<?> getProfile() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsername(username).orElse(null);
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
@@ -48,12 +46,9 @@ public class ProfileController {
 
     // PUT /api/profile/credentials — change username and/or password
     @PutMapping("/credentials")
-    public ResponseEntity<?> updateCredentials(Principal principal, @RequestBody Map<String, String> body) {
-        if (principal == null) {
-            return ResponseEntity.status(401).body(Map.of("message", "Not authenticated"));
-        }
-
-        User user = userRepository.findByUsername(principal.getName()).orElse(null);
+    public ResponseEntity<?> updateCredentials(@RequestBody Map<String, String> body) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsername(username).orElse(null);
         if (user == null) {
             return ResponseEntity.status(404).body(Map.of("message", "User not found"));
         }
