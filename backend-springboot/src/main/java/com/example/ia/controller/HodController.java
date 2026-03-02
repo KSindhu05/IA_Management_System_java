@@ -306,18 +306,38 @@ public class HodController {
             facMap.put("department", fac.getDepartment());
             facMap.put("designation", fac.getDesignation());
             facMap.put("semester", fac.getSemester());
-            facMap.put("section", fac.getSection());
             facMap.put("role", fac.getRole());
             facMap.put("cieRole", fac.getCieRole()); // THEORY, LAB, or null
 
-            // Filter subjects: only keep subjects that belong to this department
-            String filteredSubjects = "";
-            if (fac.getSubjects() != null && !fac.getSubjects().isBlank()) {
-                filteredSubjects = Arrays.stream(fac.getSubjects().split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isEmpty() && deptSubjectNames.contains(s))
-                        .collect(Collectors.joining(", "));
+            Set<String> thisDeptSections = new HashSet<>();
+            if (department.equals(fac.getDepartment()) && fac.getSection() != null && !fac.getSection().isBlank()) {
+                Arrays.stream(fac.getSection().split(",")).map(String::trim).filter(s -> !s.isEmpty())
+                        .forEach(thisDeptSections::add);
             }
+
+            Set<String> thisDeptSubjects = new HashSet<>();
+            if (department.equals(fac.getDepartment()) && fac.getSubjects() != null && !fac.getSubjects().isBlank()) {
+                Arrays.stream(fac.getSubjects().split(",")).map(String::trim)
+                        .filter(s -> !s.isEmpty() && deptSubjectNames.contains(s)).forEach(thisDeptSubjects::add);
+            }
+
+            List<FacultyAssignmentRequest> facRequests = assignmentRequestRepository
+                    .findByFacultyIdAndTargetDepartmentAndStatus(fac.getId(), department, "APPROVED");
+            for (FacultyAssignmentRequest req : facRequests) {
+                if (req.getSections() != null && !req.getSections().isBlank()) {
+                    Arrays.stream(req.getSections().split(",")).map(String::trim).filter(s -> !s.isEmpty())
+                            .forEach(thisDeptSections::add);
+                }
+                if (req.getSubjects() != null && !req.getSubjects().isBlank()) {
+                    Arrays.stream(req.getSubjects().split(",")).map(String::trim)
+                            .filter(s -> !s.isEmpty() && deptSubjectNames.contains(s)).forEach(thisDeptSubjects::add);
+                }
+            }
+
+            String filteredSections = String.join(", ", thisDeptSections);
+            facMap.put("section", filteredSections.isEmpty() ? null : filteredSections);
+
+            String filteredSubjects = String.join(", ", thisDeptSubjects);
             facMap.put("subjects", filteredSubjects.isEmpty() ? null : filteredSubjects);
 
             result.add(facMap);
@@ -366,43 +386,18 @@ public class HodController {
                 request.setResponseDate(LocalDateTime.now());
                 assignmentRequestRepository.save(request);
 
-                // Update faculty's subjects field — merge new subjects
+                // Do NOT modify cross-department details in the User entity to prevent data
+                // bleeding
                 userRepository.findById(request.getFacultyId()).ifPresent(faculty -> {
-                    String existingSubjects = faculty.getSubjects() != null ? faculty.getSubjects() : "";
-                    Set<String> subjectSet = new HashSet<>(
-                            Arrays.asList(existingSubjects.split(",")).stream()
-                                    .map(String::trim).filter(s -> !s.isEmpty())
-                                    .collect(Collectors.toList()));
-
-                    // Add newly approved subjects
                     String[] newSubjects = request.getSubjects().split(",");
-                    for (String sub : newSubjects) {
-                        subjectSet.add(sub.trim());
-                    }
 
-                    faculty.setSubjects(String.join(", ", subjectSet));
-
-                    // Merge sections if provided
-                    if (request.getSections() != null && !request.getSections().isBlank()) {
-                        String existingSections = faculty.getSection() != null ? faculty.getSection() : "";
-                        Set<String> sectionSet = new HashSet<>(
-                                Arrays.asList(existingSections.split(",")).stream()
-                                        .map(String::trim).filter(s -> !s.isEmpty())
-                                        .collect(Collectors.toList()));
-                        for (String sec : request.getSections().split(",")) {
-                            sectionSet.add(sec.trim());
-                        }
-                        faculty.setSection(String.join(",", sectionSet));
-                    }
-
-                    userRepository.save(faculty);
-
-                    // Update instructorName in Subject records
+                    // Update instructorName in Subject records for the TARGET department only
                     for (String subName : newSubjects) {
-                        subjectRepository.findFirstByName(subName.trim()).ifPresent(subject -> {
-                            subject.setInstructorName(faculty.getFullName());
-                            subjectRepository.save(subject);
-                        });
+                        subjectRepository.findFirstByNameAndDepartment(subName.trim(), request.getTargetDepartment())
+                                .ifPresent(subject -> {
+                                    subject.setInstructorName(faculty.getFullName());
+                                    subjectRepository.save(subject);
+                                });
                     }
                 });
 

@@ -69,6 +69,23 @@ public class FacultyService {
         // Use faculty's own department as home department
         String homeDept = user.getDepartment();
 
+        List<FacultyAssignmentRequest> approvedRequests = assignmentRequestRepository
+                .findByFacultyId(user.getId());
+
+        // Merge any sections explicitly requested for the home department
+        Set<String> allHomeSections = new HashSet<>(homeSections);
+        for (FacultyAssignmentRequest req : approvedRequests) {
+            if ("APPROVED".equals(req.getStatus()) && homeDept != null && homeDept.equals(req.getTargetDepartment())) {
+                if (req.getSections() != null && !req.getSections().isBlank()) {
+                    Arrays.stream(req.getSections().split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .forEach(allHomeSections::add);
+                }
+            }
+        }
+        homeSections = new ArrayList<>(allHomeSections);
+
         List<Student> result = new ArrayList<>();
         Set<Long> addedIds = new HashSet<>();
 
@@ -88,8 +105,6 @@ public class FacultyService {
         }
 
         // 2. Cross-department students — use each request's own sections
-        List<FacultyAssignmentRequest> approvedRequests = assignmentRequestRepository
-                .findByFacultyId(user.getId());
         for (FacultyAssignmentRequest req : approvedRequests) {
             if (!"APPROVED".equals(req.getStatus()))
                 continue;
@@ -175,8 +190,8 @@ public class FacultyService {
     }
 
     public FacultyClassAnalytics getAnalytics(String username) {
-        User user = userRepository.findByUsername(username).orElse(null);
-        List<String> allowedSections = user != null ? parseSections(user) : List.of();
+        List<Student> allowedStudents = getStudentsForFaculty(username);
+        Set<Long> allowedStudentIds = allowedStudents.stream().map(Student::getId).collect(Collectors.toSet());
 
         List<SubjectWithRoleDto> subjects = getSubjectsForFaculty(username);
         double totalScore = 0;
@@ -192,9 +207,8 @@ public class FacultyService {
                 if (mark.getStudent() == null)
                     continue;
 
-                // If faculty has section restrictions, skip students outside those sections
-                if (!allowedSections.isEmpty() &&
-                        !allowedSections.contains(mark.getStudent().getSection())) {
+                // Skip students not in the faculty's allowed list
+                if (!allowedStudentIds.contains(mark.getStudent().getId())) {
                     continue;
                 }
 

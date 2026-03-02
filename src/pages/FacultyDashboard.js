@@ -380,6 +380,121 @@ const FacultyDashboard = () => {
     const [csvFile, setCsvFile] = useState(null);
     const [csvUploading, setCsvUploading] = useState(false);
 
+    // -- Bulk Upload State & Handlers --
+    const fileInputRef = React.useRef(null);
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const csvText = event.target.result;
+            const lines = csvText.split('\n').map(line => line.trim()).filter(line => line);
+            if (lines.length < 2) {
+                showToast("CSV file is empty or missing headers", "error");
+                return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const regNoIndex = headers.findIndex(h => h.includes('reg') || h.includes('roll'));
+            const nameIndex = headers.findIndex(h => h.includes('name'));
+
+            if (regNoIndex === -1 && nameIndex === -1) {
+                showToast("Could not find Registration Number or Student Name column", "error");
+                return;
+            }
+
+            let parsedCount = 0;
+            const newMarks = { ...marks };
+
+            for (let i = 1; i < lines.length; i++) {
+                const row = lines[i].split(',').map(c => c.trim());
+
+                let student = null;
+
+                if (regNoIndex !== -1 && row.length > regNoIndex) {
+                    const regNo = row[regNoIndex];
+                    student = students.find(s => s.regNo === regNo || s.rollNo === regNo);
+                }
+
+                if (!student && nameIndex !== -1 && row.length > nameIndex) {
+                    const name = row[nameIndex].toLowerCase();
+                    student = students.find(s => (s.name || '').toLowerCase() === name);
+                }
+
+                if (student) {
+                    let updated = false;
+
+                    const updateField = (headerName, stateField) => {
+                        const idx = headers.findIndex(h => h === headerName.toLowerCase());
+                        if (idx !== -1 && row[idx] !== "") {
+                            let val = row[idx];
+                            if (val !== 'Ab') {
+                                val = parseInt(val, 10);
+                                if (isNaN(val)) val = '';
+                            }
+                            if (!newMarks[student.id]) newMarks[student.id] = { cie1: '', cie2: '', cie3: '', cie4: '', cie5: '', cie1Att: '', cie2Att: '', cie3Att: '', cie4Att: '', cie5Att: '' };
+                            newMarks[student.id][stateField] = val;
+                            updated = true;
+                        }
+                    };
+
+                    if (selectedCieType === 'all') {
+                        ['cie1', 'cie2', 'cie3', 'cie4', 'cie5'].forEach(cie => {
+                            updateField(cie, cie);
+                            updateField(cie + 'att', cie + 'Att');
+                            updateField(cie + ' attendance', cie + 'Att');
+                            updateField('attendance ' + cie, cie + 'Att');
+                        });
+                    } else {
+                        updateField('marks', selectedCieType);
+                        updateField(selectedCieType, selectedCieType);
+                        updateField('attendance', selectedCieType + 'Att');
+                        updateField(selectedCieType + 'att', selectedCieType + 'Att');
+                    }
+
+                    if (updated) parsedCount++;
+                }
+            }
+
+            setMarks(newMarks);
+
+            // Also update the global allStudentMarks so it computes grade/average locally before save
+            if (selectedSubject) {
+                setAllStudentMarks(prev => {
+                    const subjectMarks = prev[selectedSubject.id] || {};
+                    const updatedSubjectMarks = { ...subjectMarks };
+
+                    Object.keys(newMarks).forEach(sId => {
+                        updatedSubjectMarks[sId] = {
+                            ...(updatedSubjectMarks[sId] || {}),
+                            ...newMarks[sId]
+                        };
+                    });
+
+                    return {
+                        ...prev,
+                        [selectedSubject.id]: updatedSubjectMarks
+                    };
+                });
+            }
+
+            showToast(`Successfully updated marks for ${parsedCount} students from CSV`);
+        };
+        reader.readAsText(file);
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const triggerFileUpload = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
     // Low Performer Filters
     const [filterSubject, setFilterSubject] = useState('All');
     const [filterCIE, setFilterCIE] = useState('All');
@@ -2311,6 +2426,8 @@ const FacultyDashboard = () => {
 
                     <div className={styles.headerActions}>
                         <div className={styles.actionButtons}>
+
+
                             <button className={styles.secondaryBtn} onClick={togglePreview} title="Preview Report">
                                 <FileText size={16} /> Preview
                             </button>
